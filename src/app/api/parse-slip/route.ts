@@ -1,0 +1,99 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+
+const SESSION_COOKIE = "thevig_session";
+const SESSION_VALUE = "authenticated";
+
+export async function POST(req: NextRequest) {
+  // Auth check
+  const cookieStore = await cookies();
+  if (cookieStore.get(SESSION_COOKIE)?.value !== SESSION_VALUE) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { image, mediaType } = await req.json();
+
+  if (!image || !mediaType) {
+    return NextResponse.json(
+      { error: "Missing image or mediaType" },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY not configured" },
+      { status: 500 }
+    );
+  }
+
+  const client = new Anthropic({ apiKey });
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 1024,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: image,
+              },
+            },
+            {
+              type: "text",
+              text: `Analyze this bet slip screenshot. Extract ALL individual bets shown. For each bet, provide:
+- description: The bet description (e.g. "Chiefs -3.5", "Lakers ML", "Over 45.5")
+- oddsAmerican: The American odds as a number (e.g. -110, +150). If decimal or fractional odds are shown, convert to American.
+- stake: The wager/stake amount as a number (units, not dollars). If not visible, use 0.
+- eventKey: A short identifier for the game/event (e.g. "chiefs-bills-feb17"). Use lowercase with hyphens.
+
+If this is a parlay/multi-leg bet, extract it as a single bet with the combined description listing all legs.
+
+Respond ONLY with valid JSON in this exact format, no other text:
+{
+  "bets": [
+    {
+      "description": "string",
+      "oddsAmerican": number,
+      "stake": number,
+      "eventKey": "string"
+    }
+  ]
+}
+
+If you cannot identify any bets in the image, respond with: {"bets": []}`,
+            },
+          ],
+        },
+      ],
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      return NextResponse.json({ bets: [] });
+    }
+
+    // Extract JSON from response (handle markdown code blocks)
+    let jsonStr = textBlock.text.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    const parsed = JSON.parse(jsonStr);
+    return NextResponse.json(parsed);
+  } catch (err) {
+    console.error("Parse slip error:", err);
+    return NextResponse.json(
+      { error: "Failed to parse bet slip", bets: [] },
+      { status: 500 }
+    );
+  }
+}

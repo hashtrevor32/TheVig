@@ -12,12 +12,136 @@ model Group {
   name      String
   createdAt DateTime @default(now())
   members   Member[]
+  weeks     Week[]
 }
 
 model Member {
-  id        String   @id @default(cuid())
-  groupId   String
-  group     Group    @relation(fields: [groupId], references: [id])
+  id             String          @id @default(cuid())
+  groupId        String
+  group          Group           @relation(fields: [groupId], references: [id])
+  name           String
+  createdAt      DateTime        @default(now())
+  weekMembers    WeekMember[]
+  bets           Bet[]
+  freePlayAwards FreePlayAward[]
+  weekStatements WeekStatement[]
+}
+
+enum WeekStatus {
+  OPEN
+  CLOSED
+}
+
+model Week {
+  id             String          @id @default(cuid())
+  groupId        String
+  group          Group           @relation(fields: [groupId], references: [id])
+  name           String
+  startAt        DateTime
+  endAt          DateTime
+  status         WeekStatus      @default(OPEN)
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  weekMembers    WeekMember[]
+  bets           Bet[]
+  freePlayAwards FreePlayAward[]
+  weekStatements WeekStatement[]
+  promos         Promo[]
+}
+
+model WeekMember {
+  id               String @id @default(cuid())
+  weekId           String
+  week             Week   @relation(fields: [weekId], references: [id])
+  memberId         String
+  member           Member @relation(fields: [memberId], references: [id])
+  creditLimitUnits Int    @default(1000)
+
+  @@unique([weekId, memberId])
+}
+
+enum BetStatus {
+  OPEN
+  SETTLED
+}
+
+enum BetResult {
+  WIN
+  LOSS
+  PUSH
+}
+
+model Bet {
+  id                  String    @id @default(cuid())
+  weekId              String
+  week                Week      @relation(fields: [weekId], references: [id])
+  memberId            String
+  member              Member    @relation(fields: [memberId], references: [id])
+  placedAt            DateTime  @default(now())
+  description         String
+  eventKey            String?
+  oddsAmerican        Int
+  stakeCashUnits      Int
+  stakeFreePlayUnits  Int       @default(0)
+  status              BetStatus @default(OPEN)
+  result              BetResult?
+  payoutCashUnits     Int?
+  payoutFreePlayUnits Int?
+  settledAt           DateTime?
+  createdAt           DateTime  @default(now())
+}
+
+enum FreePlaySource {
+  PROMO
+  MANUAL
+}
+
+enum FreePlayStatus {
+  EARNED
+  VOIDED
+}
+
+model FreePlayAward {
+  id          String         @id @default(cuid())
+  weekId      String
+  week        Week           @relation(fields: [weekId], references: [id])
+  memberId    String
+  member      Member         @relation(fields: [memberId], references: [id])
+  source      FreePlaySource @default(MANUAL)
+  amountUnits Int
+  status      FreePlayStatus @default(EARNED)
+  notes       String?
+  promoId     String?
+  createdAt   DateTime       @default(now())
+}
+
+enum PromoType {
+  LOSS_REBATE
+}
+
+model Promo {
+  id        String    @id @default(cuid())
+  weekId    String
+  week      Week      @relation(fields: [weekId], references: [id])
   name      String
-  createdAt DateTime @default(now())
+  type      PromoType @default(LOSS_REBATE)
+  ruleJson  Json
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+model WeekStatement {
+  id                    String @id @default(cuid())
+  weekId                String
+  week                  Week   @relation(fields: [weekId], references: [id])
+  memberId              String
+  member                Member @relation(fields: [memberId], references: [id])
+  cashProfitUnits       Int
+  freePlayEarnedUnits   Int
+  weeklyScoreUnits      Int
+  owesHouseUnits        Int
+  houseOwesUnits        Int
+  houseOwesFreePlayUnits Int
+
+  @@unique([weekId, memberId])
 }

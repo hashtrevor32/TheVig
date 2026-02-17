@@ -1,0 +1,410 @@
+"use client";
+
+import { useState, useRef } from "react";
+import { createBet } from "@/lib/actions";
+import { useRouter } from "next/navigation";
+import { Camera, Loader2, X, Sparkles } from "lucide-react";
+
+type MemberCredit = {
+  id: string;
+  name: string;
+  creditLimit: number;
+  openExposure: number;
+  availableCredit: number;
+};
+
+type ParsedBet = {
+  description: string;
+  oddsAmerican: number;
+  stake: number;
+  eventKey: string;
+};
+
+export function AddBetForm({
+  weekId,
+  members,
+}: {
+  weekId: string;
+  members: MemberCredit[];
+}) {
+  const [memberId, setMemberId] = useState("");
+  const [description, setDescription] = useState("");
+  const [eventKey, setEventKey] = useState("");
+  const [oddsAmerican, setOddsAmerican] = useState("");
+  const [stakeCashUnits, setStakeCashUnits] = useState("");
+  const [overrideCredit, setOverrideCredit] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  // AI scan state
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [parsedBets, setParsedBets] = useState<ParsedBet[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedMember = members.find((m) => m.id === memberId);
+  const stake = parseInt(stakeCashUnits) || 0;
+  const exceedsCredit =
+    selectedMember && stake > selectedMember.availableCredit;
+
+  async function handleScan(file: File) {
+    setScanError("");
+    setScanning(true);
+    setParsedBets([]);
+
+    // Show preview
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+
+    try {
+      // Convert to base64
+      const buffer = await file.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce(
+          (data, byte) => data + String.fromCharCode(byte),
+          ""
+        )
+      );
+
+      const mediaType = file.type as
+        | "image/jpeg"
+        | "image/png"
+        | "image/webp"
+        | "image/gif";
+
+      const res = await fetch("/api/parse-slip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64, mediaType }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to parse");
+      }
+
+      if (data.bets && data.bets.length > 0) {
+        setParsedBets(data.bets);
+        // Auto-fill first bet
+        fillBet(data.bets[0]);
+      } else {
+        setScanError("No bets detected in image. Try a clearer photo.");
+      }
+    } catch (err) {
+      setScanError(
+        err instanceof Error ? err.message : "Failed to scan bet slip"
+      );
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function fillBet(bet: ParsedBet) {
+    setDescription(bet.description);
+    setOddsAmerican(String(bet.oddsAmerican));
+    if (bet.stake > 0) setStakeCashUnits(String(bet.stake));
+    if (bet.eventKey) setEventKey(bet.eventKey);
+  }
+
+  function clearScan() {
+    setParsedBets([]);
+    setPreviewUrl(null);
+    setScanError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!memberId || !description || !oddsAmerican || !stakeCashUnits) return;
+
+    setLoading(true);
+    try {
+      await createBet({
+        weekId,
+        memberId,
+        description,
+        eventKey: eventKey || undefined,
+        oddsAmerican: parseInt(oddsAmerican),
+        stakeCashUnits: stake,
+        overrideCredit,
+      });
+
+      // If there are more parsed bets queued, fill the next one
+      if (parsedBets.length > 1) {
+        const remaining = parsedBets.filter(
+          (b) => b.description !== description || b.oddsAmerican !== parseInt(oddsAmerican)
+        );
+        setParsedBets(remaining);
+        if (remaining.length > 0) {
+          fillBet(remaining[0]);
+          setStakeCashUnits("");
+          setLoading(false);
+          router.refresh();
+          return;
+        }
+      }
+
+      router.push(`/weeks/${weekId}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create bet");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* AI Scan Button */}
+      <div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleScan(file);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={scanning}
+          className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-700 disabled:to-gray-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
+        >
+          {scanning ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Scanning bet slip...
+            </>
+          ) : (
+            <>
+              <Camera size={18} />
+              <Sparkles size={14} />
+              Scan Bet Slip
+            </>
+          )}
+        </button>
+        <p className="text-gray-600 text-xs text-center mt-1">
+          Take a photo or upload a screenshot — AI fills the form
+        </p>
+      </div>
+
+      {/* Scan Preview & Results */}
+      {previewUrl && (
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-500">Scanned Image</span>
+            <button
+              type="button"
+              onClick={clearScan}
+              className="text-gray-500 hover:text-gray-300"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <img
+            src={previewUrl}
+            alt="Bet slip"
+            className="w-full rounded-lg max-h-40 object-contain bg-gray-800"
+          />
+          {scanError && (
+            <p className="text-red-400 text-xs">{scanError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Multiple Bets Detected */}
+      {parsedBets.length > 1 && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 space-y-2">
+          <p className="text-purple-400 text-xs font-medium">
+            {parsedBets.length} bets detected — submit one at a time
+          </p>
+          <div className="space-y-1">
+            {parsedBets.map((b, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => fillBet(b)}
+                className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                  description === b.description &&
+                  oddsAmerican === String(b.oddsAmerican)
+                    ? "bg-purple-500/20 text-purple-300"
+                    : "text-gray-400 hover:bg-gray-800"
+                }`}
+              >
+                {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
+                {b.oddsAmerican})
+                {b.stake > 0 && ` · ${b.stake} units`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-800" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-black px-2 text-gray-600">
+            {parsedBets.length > 0 ? "review & edit" : "or enter manually"}
+          </span>
+        </div>
+      </div>
+
+      {/* Member Selector */}
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Member</label>
+        <select
+          value={memberId}
+          onChange={(e) => setMemberId(e.target.value)}
+          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Select member...</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} ({m.availableCredit} units available)
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Credit Panel */}
+      {selectedMember && (
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-3 space-y-2">
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Credit: {selectedMember.creditLimit} units</span>
+            <span>Used: {selectedMember.openExposure} units</span>
+            <span>Available: {selectedMember.availableCredit} units</span>
+          </div>
+          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+            {(() => {
+              const pct =
+                selectedMember.creditLimit > 0
+                  ? ((selectedMember.openExposure + stake) /
+                      selectedMember.creditLimit) *
+                    100
+                  : 0;
+              const color =
+                pct < 50
+                  ? "bg-green-500"
+                  : pct < 80
+                  ? "bg-yellow-500"
+                  : "bg-red-500";
+              return (
+                <div
+                  className={`h-full ${color} rounded-full transition-all`}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Bet Fields */}
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Description</label>
+        <input
+          type="text"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="e.g. Chiefs -3.5"
+          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">
+          Event Key (optional)
+        </label>
+        <input
+          type="text"
+          value={eventKey}
+          onChange={(e) => setEventKey(e.target.value)}
+          placeholder="e.g. chiefs-bills-jan26"
+          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">
+            Odds (American)
+          </label>
+          <input
+            type="number"
+            value={oddsAmerican}
+            onChange={(e) => setOddsAmerican(e.target.value)}
+            placeholder="-110"
+            className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">
+            Stake (units)
+          </label>
+          <input
+            type="number"
+            value={stakeCashUnits}
+            onChange={(e) => setStakeCashUnits(e.target.value)}
+            placeholder="100"
+            min="1"
+            className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Credit Warning */}
+      {exceedsCredit && !overrideCredit && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+          <p className="text-red-400 text-sm">
+            Stake exceeds available credit by{" "}
+            {stake - selectedMember.availableCredit} units
+          </p>
+        </div>
+      )}
+
+      {/* Admin Override */}
+      <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={overrideCredit}
+          onChange={(e) => setOverrideCredit(e.target.checked)}
+          className="rounded bg-gray-800 border-gray-600"
+        />
+        Admin override (bypass credit limit)
+      </label>
+
+      {error && (
+        <p className="text-red-400 text-sm">{error}</p>
+      )}
+
+      <button
+        type="submit"
+        disabled={
+          loading ||
+          !memberId ||
+          !description ||
+          !oddsAmerican ||
+          !stakeCashUnits ||
+          (!!exceedsCredit && !overrideCredit)
+        }
+        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors"
+      >
+        {loading
+          ? "Placing..."
+          : parsedBets.length > 1
+          ? `Place Bet (${parsedBets.length - 1} more queued)`
+          : "Place Bet"}
+      </button>
+    </form>
+  );
+}
