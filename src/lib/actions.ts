@@ -208,7 +208,8 @@ export async function createPromo(data: {
       weekId: data.weekId,
       name: data.name,
       type: data.type,
-      ruleJson: data.ruleJson,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ruleJson: data.ruleJson as any,
     },
   });
   revalidatePath(`/weeks/${data.weekId}`);
@@ -225,7 +226,8 @@ export async function updatePromo(
     where: { id: promoId },
     data: {
       ...(data.name !== undefined && { name: data.name }),
-      ...(data.ruleJson !== undefined && { ruleJson: data.ruleJson }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(data.ruleJson !== undefined && { ruleJson: data.ruleJson as any }),
     },
   });
   revalidatePath(`/weeks/${promo.weekId}`);
