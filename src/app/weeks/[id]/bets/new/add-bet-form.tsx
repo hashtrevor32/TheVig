@@ -260,24 +260,21 @@ export function AddBetForm({
         </div>
       )}
 
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-800" />
-        </div>
-        <div className="relative flex justify-center text-xs">
-          <span className="bg-black px-2 text-gray-600">
-            {parsedBets.length > 0 ? "review & edit" : "or enter manually"}
-          </span>
-        </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 border-t border-gray-800" />
+        <span className="text-xs text-gray-600 shrink-0">
+          {parsedBets.length > 0 ? "review & edit" : "or enter manually"}
+        </span>
+        <div className="flex-1 border-t border-gray-800" />
       </div>
 
       {/* Member Selector */}
-      <div>
+      <div className="relative z-10">
         <label className="text-xs text-gray-500 mb-1 block">Member</label>
         <select
           value={memberId}
           onChange={(e) => setMemberId(e.target.value)}
-          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
         >
           <option value="">Select member...</option>
           {members.map((m) => (
