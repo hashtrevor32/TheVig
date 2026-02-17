@@ -11,7 +11,22 @@ import { generatePromoAwards } from "./promo-engine";
 export async function createMember(name: string) {
   const group = await prisma.group.findFirst();
   if (!group) throw new Error("No group found");
-  await prisma.member.create({ data: { name, groupId: group.id } });
+  const member = await prisma.member.create({ data: { name, groupId: group.id } });
+
+  // Auto-add new member to all open weeks
+  const openWeeks = await prisma.week.findMany({
+    where: { groupId: group.id, status: "OPEN" },
+  });
+  if (openWeeks.length > 0) {
+    await prisma.weekMember.createMany({
+      data: openWeeks.map((w) => ({
+        weekId: w.id,
+        memberId: member.id,
+        creditLimitUnits: 1000,
+      })),
+    });
+  }
+
   revalidatePath("/members");
 }
 
@@ -37,6 +52,21 @@ export async function createWeek(data: {
       endAt: new Date(data.endAt),
     },
   });
+
+  // Auto-add all members to the new week
+  const members = await prisma.member.findMany({
+    where: { groupId: group.id },
+  });
+  if (members.length > 0) {
+    await prisma.weekMember.createMany({
+      data: members.map((m) => ({
+        weekId: week.id,
+        memberId: m.id,
+        creditLimitUnits: 1000,
+      })),
+    });
+  }
+
   revalidatePath("/weeks");
   return week.id;
 }
