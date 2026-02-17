@@ -49,6 +49,31 @@ export function AddBetForm({
   const exceedsCredit =
     selectedMember && stake > selectedMember.availableCredit;
 
+  function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        const base64 = dataUrl.split(",")[1];
+        URL.revokeObjectURL(img.src);
+        resolve({ base64, mediaType: "image/jpeg" });
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   async function handleScan(file: File) {
     setScanError("");
     setScanning(true);
@@ -59,20 +84,8 @@ export function AddBetForm({
     setPreviewUrl(url);
 
     try {
-      // Convert to base64
-      const buffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce(
-          (data, byte) => data + String.fromCharCode(byte),
-          ""
-        )
-      );
-
-      const mediaType = file.type as
-        | "image/jpeg"
-        | "image/png"
-        | "image/webp"
-        | "image/gif";
+      // Compress and convert to base64
+      const { base64, mediaType } = await compressImage(file);
 
       const res = await fetch("/api/parse-slip", {
         method: "POST",
@@ -165,7 +178,6 @@ export function AddBetForm({
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
