@@ -172,6 +172,56 @@ export function AddBetForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Member Selector — first so it's always visible */}
+      <div>
+        <label className="text-xs text-gray-500 mb-1 block">Member</label>
+        <select
+          value={memberId}
+          onChange={(e) => setMemberId(e.target.value)}
+          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Select member...</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} ({m.availableCredit} units available)
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Credit Panel */}
+      {selectedMember && (
+        <div className="bg-gray-900 rounded-lg border border-gray-800 p-3 space-y-2">
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Credit: {selectedMember.creditLimit} units</span>
+            <span>Used: {selectedMember.openExposure} units</span>
+            <span>Available: {selectedMember.availableCredit} units</span>
+          </div>
+          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+            {(() => {
+              const pct =
+                selectedMember.creditLimit > 0
+                  ? ((selectedMember.openExposure + stake) /
+                      selectedMember.creditLimit) *
+                    100
+                  : 0;
+              const color =
+                pct < 50
+                  ? "bg-green-500"
+                  : pct < 80
+                  ? "bg-yellow-500"
+                  : "bg-red-500";
+              return (
+                <div
+                  className={`h-full ${color} rounded-full transition-all`}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* AI Scan Button */}
       <div>
         <input
@@ -256,64 +306,6 @@ export function AddBetForm({
                 {b.stake > 0 && ` · ${b.stake} units`}
               </button>
             ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2">
-        <div className="flex-1 border-t border-gray-800" />
-        <span className="text-xs text-gray-600 shrink-0">
-          {parsedBets.length > 0 ? "review & edit" : "or enter manually"}
-        </span>
-        <div className="flex-1 border-t border-gray-800" />
-      </div>
-
-      {/* Member Selector */}
-      <div className="relative z-10">
-        <label className="text-xs text-gray-500 mb-1 block">Member</label>
-        <select
-          value={memberId}
-          onChange={(e) => setMemberId(e.target.value)}
-          className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-        >
-          <option value="">Select member...</option>
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.availableCredit} units available)
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Credit Panel */}
-      {selectedMember && (
-        <div className="bg-gray-900 rounded-lg border border-gray-800 p-3 space-y-2">
-          <div className="flex justify-between text-xs text-gray-400">
-            <span>Credit: {selectedMember.creditLimit} units</span>
-            <span>Used: {selectedMember.openExposure} units</span>
-            <span>Available: {selectedMember.availableCredit} units</span>
-          </div>
-          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-            {(() => {
-              const pct =
-                selectedMember.creditLimit > 0
-                  ? ((selectedMember.openExposure + stake) /
-                      selectedMember.creditLimit) *
-                    100
-                  : 0;
-              const color =
-                pct < 50
-                  ? "bg-green-500"
-                  : pct < 80
-                  ? "bg-yellow-500"
-                  : "bg-red-500";
-              return (
-                <div
-                  className={`h-full ${color} rounded-full transition-all`}
-                  style={{ width: `${Math.min(pct, 100)}%` }}
-                />
-              );
-            })()}
           </div>
         </div>
       )}
