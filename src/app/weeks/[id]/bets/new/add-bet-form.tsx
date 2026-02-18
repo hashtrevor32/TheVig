@@ -21,12 +21,16 @@ type ParsedBet = {
   eventKey: string;
 };
 
+type ExistingBet = { description: string; oddsAmerican: number };
+
 export function AddBetForm({
   weekId,
   members,
+  existingBetsByMember = {},
 }: {
   weekId: string;
   members: MemberCredit[];
+  existingBetsByMember?: Record<string, ExistingBet[]>;
 }) {
   const [memberId, setMemberId] = useState("");
   const [description, setDescription] = useState("");
@@ -42,7 +46,9 @@ export function AddBetForm({
   // AI scan state
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [allScannedBets, setAllScannedBets] = useState<ParsedBet[]>([]);
   const [parsedBets, setParsedBets] = useState<ParsedBet[]>([]);
+  const [skippedBets, setSkippedBets] = useState<ParsedBet[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,10 +84,20 @@ export function AddBetForm({
     });
   }
 
+  function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
+    return memberExisting.some(
+      (existing) =>
+        existing.oddsAmerican === bet.oddsAmerican &&
+        existing.description.toLowerCase().trim() === bet.description.toLowerCase().trim()
+    );
+  }
+
   async function handleScan(file: File) {
     setScanError("");
     setScanning(true);
+    setAllScannedBets([]);
     setParsedBets([]);
+    setSkippedBets([]);
 
     // Show preview
     const url = URL.createObjectURL(file);
@@ -104,9 +120,30 @@ export function AddBetForm({
       }
 
       if (data.bets && data.bets.length > 0) {
-        setParsedBets(data.bets);
-        // Auto-fill first bet
-        fillBet(data.bets[0]);
+        // Filter out bets already placed for the selected member
+        const memberExisting = memberId ? existingBetsByMember[memberId] || [] : [];
+        const newBets: ParsedBet[] = [];
+        const dupes: ParsedBet[] = [];
+
+        for (const bet of data.bets) {
+          if (memberId && isDuplicate(bet, memberExisting)) {
+            dupes.push(bet);
+          } else {
+            newBets.push(bet);
+          }
+        }
+
+        setAllScannedBets(data.bets);
+        setSkippedBets(dupes);
+
+        if (newBets.length > 0) {
+          setParsedBets(newBets);
+          fillBet(newBets[0]);
+        } else if (dupes.length > 0) {
+          setScanError(`All ${dupes.length} bet(s) already exist for this member.`);
+        } else {
+          setScanError("No bets detected in image. Try a clearer photo.");
+        }
       } else {
         setScanError("No bets detected in image. Try a clearer photo.");
       }
@@ -126,8 +163,35 @@ export function AddBetForm({
     if (bet.eventKey) setEventKey(bet.eventKey);
   }
 
+  function handleMemberChange(newMemberId: string) {
+    setMemberId(newMemberId);
+    // Re-filter scanned bets for new member
+    if (allScannedBets.length > 0) {
+      const memberExisting = newMemberId ? existingBetsByMember[newMemberId] || [] : [];
+      const newBets: ParsedBet[] = [];
+      const dupes: ParsedBet[] = [];
+      for (const bet of allScannedBets) {
+        if (newMemberId && isDuplicate(bet, memberExisting)) {
+          dupes.push(bet);
+        } else {
+          newBets.push(bet);
+        }
+      }
+      setParsedBets(newBets);
+      setSkippedBets(dupes);
+      setScanError("");
+      if (newBets.length > 0) {
+        fillBet(newBets[0]);
+      } else if (dupes.length > 0) {
+        setScanError(`All ${dupes.length} bet(s) already exist for this member.`);
+      }
+    }
+  }
+
   function clearScan() {
+    setAllScannedBets([]);
     setParsedBets([]);
+    setSkippedBets([]);
     setPreviewUrl(null);
     setScanError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -182,7 +246,7 @@ export function AddBetForm({
         <label className="text-xs text-gray-500 mb-1 block">Member</label>
         <select
           value={memberId}
-          onChange={(e) => setMemberId(e.target.value)}
+          onChange={(e) => handleMemberChange(e.target.value)}
           className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">Select member...</option>
@@ -318,6 +382,24 @@ export function AddBetForm({
                 {b.oddsAmerican})
                 {b.stake > 0 && ` · ${b.stake} units`}
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Skipped Duplicates */}
+      {skippedBets.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 space-y-2">
+          <p className="text-yellow-400 text-xs font-medium">
+            {skippedBets.length} bet{skippedBets.length > 1 ? "s" : ""} already exist for this member — skipped
+          </p>
+          <div className="space-y-1">
+            {skippedBets.map((b, i) => (
+              <p key={i} className="text-gray-500 text-xs line-through">
+                {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
+                {b.oddsAmerican})
+                {b.stake > 0 && ` · ${b.stake} units`}
+              </p>
             ))}
           </div>
         </div>

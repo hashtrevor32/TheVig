@@ -18,14 +18,17 @@ export default async function AddBetPage({
       weekMembers: {
         include: { member: { select: { id: true, name: true, freePlayBalance: true } } },
       },
-      bets: { where: { status: "OPEN" } },
+      bets: true,
     },
   });
 
   if (!week || week.status !== "OPEN") notFound();
 
+  const openBets = week.bets.filter((b) => b.status === "OPEN");
+  const nonVoidedBets = week.bets.filter((b) => b.status !== "VOIDED");
+
   const membersWithCredit = week.weekMembers.map((wm) => {
-    const openExposure = week.bets
+    const openExposure = openBets
       .filter((b) => b.memberId === wm.memberId)
       .reduce((s, b) => s + b.stakeCashUnits, 0);
 
@@ -39,6 +42,18 @@ export default async function AddBetPage({
     };
   });
 
+  // Build existing bets per member for duplicate detection on scan
+  const existingBetsByMember: Record<string, { description: string; oddsAmerican: number }[]> = {};
+  for (const bet of nonVoidedBets) {
+    if (!existingBetsByMember[bet.memberId]) {
+      existingBetsByMember[bet.memberId] = [];
+    }
+    existingBetsByMember[bet.memberId].push({
+      description: bet.description,
+      oddsAmerican: bet.oddsAmerican,
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -50,7 +65,11 @@ export default async function AddBetPage({
         </Link>
         <h2 className="text-2xl font-bold text-white">Add Bet</h2>
       </div>
-      <AddBetForm weekId={id} members={membersWithCredit} />
+      <AddBetForm
+        weekId={id}
+        members={membersWithCredit}
+        existingBetsByMember={existingBetsByMember}
+      />
     </div>
   );
 }
