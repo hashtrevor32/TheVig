@@ -132,19 +132,19 @@ export function AddBetForm({
 
       // PRIMARY: timestamp is the key identifier.
       // A member CAN legitimately place the same bet twice seconds apart.
-      // Only flag as duplicate if the placed timestamps match within 60 seconds.
+      // Only flag as duplicate if the placed timestamps match within 3 seconds.
       if (bet.placedAt && existing.placedAt && (descExact || descFuzzy) && oddsMatch) {
         try {
           const scannedTime = new Date(bet.placedAt).getTime();
           const existingTime = new Date(existing.placedAt).getTime();
-          // Same bet = same timestamp (within 60s to account for AI parsing variance)
-          if (!isNaN(scannedTime) && !isNaN(existingTime) && Math.abs(scannedTime - existingTime) < 60_000) {
+          // Same bet = same timestamp (within 3s — timestamps are down to the second)
+          if (!isNaN(scannedTime) && !isNaN(existingTime) && Math.abs(scannedTime - existingTime) < 3_000) {
             return true;
           }
         } catch {
           // fall through
         }
-        // If both have timestamps but they differ by > 60s, it's a DIFFERENT bet
+        // If both have timestamps but they differ by > 3s, it's a DIFFERENT bet
         // even if description/odds/stake all match — don't flag as duplicate
         return false;
       }
