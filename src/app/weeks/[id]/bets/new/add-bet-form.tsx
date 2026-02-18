@@ -380,9 +380,33 @@ export function AddBetForm({
             betStake = b.stake > 0 ? Math.round(b.stake) : stake;
           }
 
-          // Always create as OPEN — never auto-settle from scans.
-          // The AI sometimes incorrectly detects open bets as settled.
-          // User can settle via quickSettle buttons or auto-settle feature.
+          // If the AI detected a settled result (from Result column on slip), pass it through
+          let settled: "WIN" | "LOSS" | "PUSH" | undefined;
+          let payoutCashUnits: number | undefined;
+          if (b.settled) {
+            settled = b.settled;
+            if (b.settled === "LOSS") {
+              payoutCashUnits = 0;
+            } else if (b.settled === "PUSH") {
+              payoutCashUnits = betIsFP ? 0 : betStake;
+            } else if (b.settled === "WIN") {
+              if (b.profitAmount != null && b.profitAmount > 0) {
+                payoutCashUnits = betIsFP
+                  ? Math.round(b.profitAmount)
+                  : betStake + Math.round(b.profitAmount);
+              } else {
+                const odds = Math.round(b.oddsAmerican);
+                let winnings: number;
+                if (odds > 0) {
+                  winnings = Math.round((betStake * odds) / 100);
+                } else {
+                  winnings = Math.round((betStake * 100) / Math.abs(odds));
+                }
+                payoutCashUnits = betIsFP ? winnings : betStake + winnings;
+              }
+            }
+          }
+
           return {
             description: b.description,
             eventKey: b.eventKey || undefined,
@@ -392,6 +416,7 @@ export function AddBetForm({
             stakeCashUnits: betIsFP ? 0 : betStake,
             stakeFreePlayUnits: betIsFP ? betStake : 0,
             placedAt: b.placedAt || undefined,
+            ...(settled ? { settled, payoutCashUnits } : {}),
           };
         }),
       });
@@ -413,7 +438,9 @@ export function AddBetForm({
         [memberId]: [...(prev[memberId] || []), ...addedForMember],
       }));
 
-      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!`);
+      const settledCount = parsedBets.filter(b => b.settled).length;
+      const settledMsg = settledCount > 0 ? ` (${settledCount} auto-settled)` : "";
+      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!${settledMsg}`);
       setParsedBets([]);
       setAllScannedBets([]);
       setDescription("");

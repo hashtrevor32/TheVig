@@ -60,8 +60,10 @@ IMPORTANT: If you see "Agent Payment" as the payment or funding source for a bet
 - placedAt: The exact date/time the bet was placed if visible on the slip (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
 SETTLED/RESULT DETECTION:
-- settled: If the bet is visibly settled (shows "Won", "Lost", "Win", "Loss", "Push", "Settled", a green checkmark, a red X, or any other settlement indicator), set this to "WIN", "LOSS", or "PUSH". If the bet is still open/pending, set to null.
-- profitAmount: For settled bets, the net profit or loss as a number. Positive for wins (e.g. 150 means they profited 150), negative for losses (e.g. -200 means they lost 200). For open bets, set to null.
+- settled: ONLY mark a bet as settled if there is an explicit "Result" or "Status" column/field on the slip and it clearly says "Win", "Won", "Lose", "Lost", "Loss", or "Push" next to that specific bet. If the Result column is blank/empty next to a bet, or there is no Result column visible, that bet is still OPEN — set settled to null.
+- CRITICAL: Do NOT guess settlement from colors, background shading, checkmarks, X icons, or any visual styling. ONLY read the explicit text in the Result/Status column. When in doubt, default to null (open).
+- Casino bets (sport="casino") are ALWAYS settled since they are past events — always set settled to "WIN" or "LOSS" based on the profit/loss shown.
+- profitAmount: For settled bets only, the net profit or loss as a number. Positive for wins (e.g. 150), negative for losses (e.g. -200). For open bets, set to null.
 
 CASINO PROFIT/LOSS ENTRIES:
 If you see a casino entry that just shows a profit or loss amount (e.g. "Casino +150", "Casino -200", "Table Games +75", "Slots -50") WITHOUT a specific wager amount:
