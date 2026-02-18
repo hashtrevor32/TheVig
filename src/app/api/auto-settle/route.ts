@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
+// Allow up to 60s for ESPN fetches + AI call
+export const maxDuration = 60;
+
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
 
 // All verified ESPN scoreboard endpoints

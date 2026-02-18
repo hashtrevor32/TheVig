@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
+// Allow up to 60s for large images with many bets
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [
         {
           role: "user",
