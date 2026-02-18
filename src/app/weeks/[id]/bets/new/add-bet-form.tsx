@@ -32,6 +32,7 @@ export function AddBetForm({
   const [eventKey, setEventKey] = useState("");
   const [oddsAmerican, setOddsAmerican] = useState("");
   const [stakeCashUnits, setStakeCashUnits] = useState("");
+  const [isFreePlay, setIsFreePlay] = useState(false);
   const [overrideCredit, setOverrideCredit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,7 +48,7 @@ export function AddBetForm({
   const selectedMember = members.find((m) => m.id === memberId);
   const stake = parseInt(stakeCashUnits) || 0;
   const exceedsCredit =
-    selectedMember && stake > selectedMember.availableCredit;
+    !isFreePlay && selectedMember && stake > selectedMember.availableCredit;
 
   function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
     return new Promise((resolve, reject) => {
@@ -142,8 +143,9 @@ export function AddBetForm({
         description,
         eventKey: eventKey || undefined,
         oddsAmerican: parseInt(oddsAmerican),
-        stakeCashUnits: stake,
-        overrideCredit,
+        stakeCashUnits: isFreePlay ? 0 : stake,
+        stakeFreePlayUnits: isFreePlay ? stake : 0,
+        overrideCredit: isFreePlay || overrideCredit,
       });
 
       // If there are more parsed bets queued, fill the next one
@@ -335,6 +337,32 @@ export function AddBetForm({
         />
       </div>
 
+      {/* Free Play Toggle */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setIsFreePlay(false)}
+          className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
+            !isFreePlay
+              ? "bg-blue-600 text-white"
+              : "bg-gray-800 text-gray-400 hover:text-white"
+          }`}
+        >
+          Cash Bet
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsFreePlay(true)}
+          className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
+            isFreePlay
+              ? "bg-blue-600 text-white"
+              : "bg-gray-800 text-gray-400 hover:text-white"
+          }`}
+        >
+          Free Play Bet
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs text-gray-500 mb-1 block">
@@ -350,7 +378,7 @@ export function AddBetForm({
         </div>
         <div>
           <label className="text-xs text-gray-500 mb-1 block">
-            Stake (units)
+            {isFreePlay ? "Free Play (units)" : "Stake (units)"}
           </label>
           <input
             type="number"
@@ -358,7 +386,9 @@ export function AddBetForm({
             onChange={(e) => setStakeCashUnits(e.target.value)}
             placeholder="100"
             min="1"
-            className="w-full px-3 py-2.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full px-3 py-2.5 bg-gray-900 border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              isFreePlay ? "border-blue-500/50" : "border-gray-700"
+            }`}
           />
         </div>
       </div>
@@ -368,21 +398,23 @@ export function AddBetForm({
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
           <p className="text-red-400 text-sm">
             Stake exceeds available credit by{" "}
-            {stake - selectedMember.availableCredit} units
+            {stake - selectedMember!.availableCredit} units
           </p>
         </div>
       )}
 
       {/* Admin Override */}
-      <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={overrideCredit}
-          onChange={(e) => setOverrideCredit(e.target.checked)}
-          className="rounded bg-gray-800 border-gray-600"
-        />
-        Admin override (bypass credit limit)
-      </label>
+      {!isFreePlay && (
+        <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={overrideCredit}
+            onChange={(e) => setOverrideCredit(e.target.checked)}
+            className="rounded bg-gray-800 border-gray-600"
+          />
+          Admin override (bypass credit limit)
+        </label>
+      )}
 
       {error && (
         <p className="text-red-400 text-sm">{error}</p>
@@ -398,12 +430,18 @@ export function AddBetForm({
           !stakeCashUnits ||
           (!!exceedsCredit && !overrideCredit)
         }
-        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors"
+        className={`w-full py-3 ${
+          isFreePlay
+            ? "bg-blue-600 hover:bg-blue-700"
+            : "bg-blue-600 hover:bg-blue-700"
+        } disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors`}
       >
         {loading
           ? "Placing..."
           : parsedBets.length > 1
-          ? `Place Bet (${parsedBets.length - 1} more queued)`
+          ? `Place ${isFreePlay ? "FP " : ""}Bet (${parsedBets.length - 1} more queued)`
+          : isFreePlay
+          ? "Place Free Play Bet"
           : "Place Bet"}
       </button>
     </form>

@@ -13,6 +13,7 @@ type Bet = {
   eventKey: string | null;
   oddsAmerican: number;
   stakeCashUnits: number;
+  stakeFreePlayUnits: number;
   status: string;
   result: string | null;
   payoutCashUnits: number | null;
@@ -231,7 +232,7 @@ export function BetsList({
                 <div key={betId} className="flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-xs truncate">{bet.description}</p>
-                    <p className="text-gray-500 text-xs">{bet.member.name} &middot; {bet.stakeCashUnits}u</p>
+                    <p className="text-gray-500 text-xs">{bet.member.name} &middot; {bet.stakeFreePlayUnits > 0 ? `${bet.stakeFreePlayUnits} FP` : `${bet.stakeCashUnits}u`}</p>
                   </div>
                   <input
                     type="number"
@@ -319,13 +320,22 @@ function OpenBetCard({
             </span>
             <span className="text-xs text-gray-600">&middot;</span>
             <span className="text-xs text-gray-500">
-              {bet.stakeCashUnits} units
+              {bet.stakeFreePlayUnits > 0
+                ? `${bet.stakeFreePlayUnits} FP`
+                : `${bet.stakeCashUnits} units`}
             </span>
           </div>
         </div>
-        <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded text-xs font-medium shrink-0">
-          OPEN
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {bet.stakeFreePlayUnits > 0 && (
+            <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs font-medium">
+              FP
+            </span>
+          )}
+          <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded text-xs font-medium">
+            OPEN
+          </span>
+        </div>
       </div>
 
       {weekStatus === "OPEN" && !bulkMode && (
@@ -363,6 +373,7 @@ function OpenBetCard({
 }
 
 function SettledBetCard({ bet }: { bet: Bet }) {
+  const isFP = bet.stakeFreePlayUnits > 0;
   const profit = (bet.payoutCashUnits ?? 0) - bet.stakeCashUnits;
 
   return (
@@ -381,22 +392,31 @@ function SettledBetCard({ bet }: { bet: Bet }) {
             </span>
             <span className="text-xs text-gray-600">&middot;</span>
             <span className="text-xs text-gray-500">
-              {bet.stakeCashUnits} units
+              {isFP
+                ? `${bet.stakeFreePlayUnits} FP`
+                : `${bet.stakeCashUnits} units`}
             </span>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <span
-            className={`px-2 py-0.5 rounded text-xs font-medium ${
-              bet.result === "WIN"
-                ? "bg-green-500/10 text-green-400"
-                : bet.result === "LOSS"
-                ? "bg-red-500/10 text-red-400"
-                : "bg-gray-700 text-gray-400"
-            }`}
-          >
-            {bet.result}
-          </span>
+          <div className="flex items-center gap-1.5 justify-end">
+            {isFP && (
+              <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs font-medium">
+                FP
+              </span>
+            )}
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
+                bet.result === "WIN"
+                  ? "bg-green-500/10 text-green-400"
+                  : bet.result === "LOSS"
+                  ? "bg-red-500/10 text-red-400"
+                  : "bg-gray-700 text-gray-400"
+              }`}
+            >
+              {bet.result}
+            </span>
+          </div>
           <p
             className={`text-xs mt-1 font-medium ${
               profit > 0
@@ -432,7 +452,9 @@ function VoidedBetCard({ bet }: { bet: Bet }) {
             </span>
             <span className="text-xs text-gray-600">&middot;</span>
             <span className="text-xs text-gray-500">
-              {bet.stakeCashUnits} units
+              {bet.stakeFreePlayUnits > 0
+                ? `${bet.stakeFreePlayUnits} FP`
+                : `${bet.stakeCashUnits} units`}
             </span>
           </div>
         </div>
