@@ -1,22 +1,25 @@
 import { prisma } from "@/lib/prisma";
+import { getGroupId } from "@/lib/auth";
 import Link from "next/link";
 
 export default async function DashboardPage() {
-  const group = await prisma.group.findFirst({
+  const groupId = await getGroupId();
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
     include: { members: true },
   });
 
   const openWeeks = await prisma.week.findMany({
-    where: { status: "OPEN" },
+    where: { groupId, status: "OPEN" },
     include: {
       _count: { select: { bets: true, weekMembers: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  const totalBets = await prisma.bet.count();
-  const openBets = await prisma.bet.count({ where: { status: "OPEN" } });
-  const closedWeeks = await prisma.week.count({ where: { status: "CLOSED" } });
+  const totalBets = await prisma.bet.count({ where: { week: { groupId } } });
+  const openBets = await prisma.bet.count({ where: { status: "OPEN", week: { groupId } } });
+  const closedWeeks = await prisma.week.count({ where: { groupId, status: "CLOSED" } });
 
   return (
     <div className="space-y-6">

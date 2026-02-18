@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireWeekAccess } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CopySummary } from "./copy-summary";
@@ -9,6 +10,8 @@ export default async function ResultsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireWeekAccess(id);
+
   const week = await prisma.week.findUnique({
     where: { id },
     include: {

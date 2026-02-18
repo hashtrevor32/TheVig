@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireWeekAccess } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { computePromoResults, type LossRebateRule } from "@/lib/promo-engine";
@@ -9,6 +10,8 @@ export default async function PromoProgressPage({
   params: Promise<{ id: string; promoId: string }>;
 }) {
   const { id, promoId } = await params;
+  await requireWeekAccess(id);
+
   const promo = await prisma.promo.findUnique({
     where: { id: promoId },
     include: { week: true },

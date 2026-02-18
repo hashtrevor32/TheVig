@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { getGroupId } from "@/lib/auth";
 import { MembersList } from "./members-list";
 
 export default async function MembersPage() {
-  const group = await prisma.group.findFirst();
+  const groupId = await getGroupId();
   const members = await prisma.member.findMany({
-    where: { groupId: group?.id },
+    where: { groupId },
     orderBy: { createdAt: "asc" },
   });
 

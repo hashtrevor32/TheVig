@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { getGroupId } from "@/lib/auth";
 import Link from "next/link";
 import { WeekForm } from "./week-form";
 
 export default async function WeeksPage() {
+  const groupId = await getGroupId();
   const weeks = await prisma.week.findMany({
+    where: { groupId },
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { bets: true, weekMembers: true } },

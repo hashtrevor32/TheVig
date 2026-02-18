@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { requireWeekAccess } from "@/lib/auth";
 import Link from "next/link";
 import { FreePlayClient } from "./free-play-client";
 
@@ -9,6 +9,8 @@ export default async function FreePlayPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireWeekAccess(id);
+
   const week = await prisma.week.findUnique({
     where: { id },
     include: {
@@ -22,7 +24,7 @@ export default async function FreePlayPage({
     },
   });
 
-  if (!week) notFound();
+  if (!week) return null;
 
   const members = week.weekMembers.map((wm) => ({
     id: wm.memberId,

@@ -1,19 +1,36 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, SESSION_VALUE } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { SESSION_COOKIE, type SessionData } from "@/lib/auth";
 
 export async function POST(request: Request) {
-  const { password } = await request.json();
+  const { name, password } = await request.json();
 
-  if (password !== process.env.ADMIN_PASSWORD) {
-    return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+  if (!name || !password) {
+    return NextResponse.json({ error: "Name and password required" }, { status: 400 });
   }
 
+  const operator = await prisma.operator.findUnique({
+    where: { name },
+    include: { group: true },
+  });
+
+  if (!operator || operator.password !== password) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  const sessionData: SessionData = {
+    operatorId: operator.id,
+    groupId: operator.groupId,
+    operatorName: operator.name,
+    isAdmin: operator.isAdmin,
+  };
+
   const response = NextResponse.json({ success: true });
-  response.cookies.set(SESSION_COOKIE, SESSION_VALUE, {
+  response.cookies.set(SESSION_COOKIE, JSON.stringify(sessionData), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
     path: "/",
   });
 

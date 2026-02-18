@@ -3,7 +3,17 @@
 import { usePathname } from "next/navigation";
 import { BottomNav, Header } from "./nav";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  operatorName,
+  groupName,
+  isAdmin,
+}: {
+  children: React.ReactNode;
+  operatorName: string;
+  groupName: string;
+  isAdmin: boolean;
+}) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
 
@@ -13,8 +23,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <BottomNav />
-      <Header groupName="Main Group" />
+      <BottomNav isAdmin={isAdmin} />
+      <Header groupName={groupName} operatorName={operatorName} />
 
       {/* Main content area */}
       <main className="md:ml-56 pb-20 md:pb-0">

@@ -2,14 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "thevig_session";
-const SESSION_VALUE = "authenticated";
-
 const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths and static assets
   if (
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
@@ -19,10 +16,22 @@ export function middleware(request: NextRequest) {
   }
 
   const session = request.cookies.get(SESSION_COOKIE);
+  if (!session?.value) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
-  if (session?.value !== SESSION_VALUE) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+  try {
+    const data = JSON.parse(session.value);
+    if (!data.operatorId || !data.groupId) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    // Admin-only paths
+    if (pathname.startsWith("/admin") && !data.isAdmin) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+  } catch {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();

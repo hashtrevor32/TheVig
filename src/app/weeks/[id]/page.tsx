@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { requireWeekAccess, getGroupId } from "@/lib/auth";
 import Link from "next/link";
 import { WeekDashboardClient } from "./week-dashboard-client";
 import type { LossRebateRule } from "@/lib/promo-engine";
@@ -10,6 +10,9 @@ export default async function WeekDashboardPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireWeekAccess(id);
+  const groupId = await getGroupId();
+
   const week = await prisma.week.findUnique({
     where: { id },
     include: {
@@ -22,9 +25,10 @@ export default async function WeekDashboardPage({
     },
   });
 
-  if (!week) notFound();
+  if (!week) return null;
 
   const allMembers = await prisma.member.findMany({
+    where: { groupId },
     orderBy: { name: "asc" },
   });
 

@@ -1,14 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
-const SESSION_COOKIE = "thevig_session";
-const SESSION_VALUE = "authenticated";
+import { getSession } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  const cookieStore = await cookies();
-  if (cookieStore.get(SESSION_COOKIE)?.value !== SESSION_VALUE) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Trophy, Users, Settings } from "lucide-react";
+import { LayoutDashboard, Trophy, Users, Settings, Shield } from "lucide-react";
 
-const navItems = [
+const baseNavItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/weeks", label: "Bets", icon: Trophy },
   { href: "/members", label: "Members", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function BottomNav() {
+export function BottomNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const navItems = isAdmin
+    ? [...baseNavItems, { href: "/admin", label: "Admin", icon: Shield }]
+    : baseNavItems;
 
   return (
     <>
@@ -77,12 +80,23 @@ export function BottomNav() {
   );
 }
 
-export function Header({ groupName }: { groupName: string }) {
+export function Header({
+  groupName,
+  operatorName,
+}: {
+  groupName: string;
+  operatorName: string;
+}) {
   return (
     <header className="sticky top-0 z-40 bg-gray-900/80 backdrop-blur-sm border-b border-gray-800 md:hidden">
       <div className="px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-bold text-white">TheVig</h1>
-        <span className="text-sm text-gray-400">{groupName}</span>
+        <div className="text-right">
+          <span className="text-sm text-gray-400">{groupName}</span>
+          {operatorName && (
+            <p className="text-xs text-gray-500">{operatorName}</p>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -5,17 +5,25 @@ import { prisma } from "./prisma";
 import { getCreditInfo } from "./credit";
 import { generateWeekStatements } from "./settlement";
 import { generatePromoAwards } from "./promo-engine";
+import { getGroupId, requireSession } from "./auth";
+
+// Helper: verify a week belongs to the current operator's group
+async function verifyWeekOwnership(weekId: string) {
+  const groupId = await getGroupId();
+  const week = await prisma.week.findUnique({ where: { id: weekId } });
+  if (!week || week.groupId !== groupId) throw new Error("Week not found");
+  return week;
+}
 
 // ── Members ──
 
 export async function createMember(name: string) {
-  const group = await prisma.group.findFirst();
-  if (!group) throw new Error("No group found");
-  const member = await prisma.member.create({ data: { name, groupId: group.id } });
+  const groupId = await getGroupId();
+  const member = await prisma.member.create({ data: { name, groupId } });
 
   // Auto-add new member to all open weeks
   const openWeeks = await prisma.week.findMany({
-    where: { groupId: group.id, status: "OPEN" },
+    where: { groupId, status: "OPEN" },
   });
   if (openWeeks.length > 0) {
     await prisma.weekMember.createMany({
@@ -31,6 +39,9 @@ export async function createMember(name: string) {
 }
 
 export async function updateMember(id: string, name: string) {
+  const groupId = await getGroupId();
+  const member = await prisma.member.findUnique({ where: { id } });
+  if (!member || member.groupId !== groupId) throw new Error("Member not found");
   await prisma.member.update({ where: { id }, data: { name } });
   revalidatePath("/members");
 }
@@ -42,11 +53,10 @@ export async function createWeek(data: {
   startAt: string;
   endAt: string;
 }) {
-  const group = await prisma.group.findFirst();
-  if (!group) throw new Error("No group found");
+  const groupId = await getGroupId();
   const week = await prisma.week.create({
     data: {
-      groupId: group.id,
+      groupId,
       name: data.name,
       startAt: new Date(data.startAt),
       endAt: new Date(data.endAt),
@@ -55,7 +65,7 @@ export async function createWeek(data: {
 
   // Auto-add all members to the new week
   const members = await prisma.member.findMany({
-    where: { groupId: group.id },
+    where: { groupId },
   });
   if (members.length > 0) {
     await prisma.weekMember.createMany({
@@ -76,6 +86,7 @@ export async function addMemberToWeek(
   memberId: string,
   creditLimit: number = 1000
 ) {
+  await verifyWeekOwnership(weekId);
   await prisma.weekMember.create({
     data: { weekId, memberId, creditLimitUnits: creditLimit },
   });
@@ -83,6 +94,7 @@ export async function addMemberToWeek(
 }
 
 export async function removeMemberFromWeek(weekId: string, memberId: string) {
+  await verifyWeekOwnership(weekId);
   const openBets = await prisma.bet.count({
     where: { weekId, memberId, status: "OPEN" },
   });
@@ -107,6 +119,8 @@ export async function createBet(data: {
   stakeFreePlayUnits?: number;
   overrideCredit?: boolean;
 }) {
+  await verifyWeekOwnership(data.weekId);
+
   if (!data.overrideCredit) {
     const credit = await getCreditInfo(data.weekId, data.memberId);
     if (data.stakeCashUnits > credit.availableCredit) {
@@ -135,8 +149,13 @@ export async function settleBet(data: {
   result: "WIN" | "LOSS" | "PUSH";
   payoutCashUnits: number;
 }) {
-  const bet = await prisma.bet.findUnique({ where: { id: data.betId } });
+  const bet = await prisma.bet.findUnique({
+    where: { id: data.betId },
+    include: { week: true },
+  });
   if (!bet) throw new Error("Bet not found");
+  const groupId = await getGroupId();
+  if (bet.week.groupId !== groupId) throw new Error("Bet not found");
 
   await prisma.bet.update({
     where: { id: data.betId },
@@ -154,8 +173,13 @@ export async function quickSettle(
   betId: string,
   result: "LOSS" | "PUSH"
 ) {
-  const bet = await prisma.bet.findUnique({ where: { id: betId } });
+  const bet = await prisma.bet.findUnique({
+    where: { id: betId },
+    include: { week: true },
+  });
   if (!bet) throw new Error("Bet not found");
+  const groupId = await getGroupId();
+  if (bet.week.groupId !== groupId) throw new Error("Bet not found");
 
   const payoutCashUnits = result === "LOSS" ? 0 : bet.stakeCashUnits;
 
@@ -179,6 +203,7 @@ export async function createFreePlayAward(data: {
   amountUnits: number;
   notes?: string;
 }) {
+  await verifyWeekOwnership(data.weekId);
   await prisma.freePlayAward.create({
     data: {
       weekId: data.weekId,
@@ -194,8 +219,11 @@ export async function createFreePlayAward(data: {
 export async function voidFreePlayAward(awardId: string) {
   const award = await prisma.freePlayAward.findUnique({
     where: { id: awardId },
+    include: { week: true },
   });
   if (!award) throw new Error("Award not found");
+  const groupId = await getGroupId();
+  if (award.week.groupId !== groupId) throw new Error("Award not found");
 
   await prisma.freePlayAward.update({
     where: { id: awardId },
@@ -207,6 +235,7 @@ export async function voidFreePlayAward(awardId: string) {
 // ── Close Week ──
 
 export async function closeWeek(weekId: string) {
+  await verifyWeekOwnership(weekId);
   const openBets = await prisma.bet.count({
     where: { weekId, status: "OPEN" },
   });
@@ -214,7 +243,6 @@ export async function closeWeek(weekId: string) {
     throw new Error(`Cannot close week: ${openBets} open bets remaining`);
   }
 
-  // Generate promo free play awards before statements so they're included
   await generatePromoAwards(weekId);
   await generateWeekStatements(weekId);
 
@@ -233,6 +261,7 @@ export async function createPromo(data: {
   type: "LOSS_REBATE";
   ruleJson: Record<string, unknown>;
 }) {
+  await verifyWeekOwnership(data.weekId);
   await prisma.promo.create({
     data: {
       weekId: data.weekId,
@@ -249,6 +278,7 @@ export async function createPromoBatch(
   weekId: string,
   promos: { name: string; type: "LOSS_REBATE"; ruleJson: Record<string, unknown> }[]
 ) {
+  await verifyWeekOwnership(weekId);
   for (const p of promos) {
     await prisma.promo.create({
       data: {
@@ -267,8 +297,13 @@ export async function updatePromo(
   promoId: string,
   data: { name?: string; ruleJson?: Record<string, unknown> }
 ) {
-  const promo = await prisma.promo.findUnique({ where: { id: promoId } });
+  const promo = await prisma.promo.findUnique({
+    where: { id: promoId },
+    include: { week: true },
+  });
   if (!promo) throw new Error("Promo not found");
+  const groupId = await getGroupId();
+  if (promo.week.groupId !== groupId) throw new Error("Promo not found");
 
   await prisma.promo.update({
     where: { id: promoId },
@@ -282,8 +317,13 @@ export async function updatePromo(
 }
 
 export async function togglePromo(promoId: string) {
-  const promo = await prisma.promo.findUnique({ where: { id: promoId } });
+  const promo = await prisma.promo.findUnique({
+    where: { id: promoId },
+    include: { week: true },
+  });
   if (!promo) throw new Error("Promo not found");
+  const groupId = await getGroupId();
+  if (promo.week.groupId !== groupId) throw new Error("Promo not found");
 
   await prisma.promo.update({
     where: { id: promoId },
@@ -293,10 +333,14 @@ export async function togglePromo(promoId: string) {
 }
 
 export async function deletePromo(promoId: string) {
-  const promo = await prisma.promo.findUnique({ where: { id: promoId } });
+  const promo = await prisma.promo.findUnique({
+    where: { id: promoId },
+    include: { week: true },
+  });
   if (!promo) throw new Error("Promo not found");
+  const groupId = await getGroupId();
+  if (promo.week.groupId !== groupId) throw new Error("Promo not found");
 
-  // Check if any awards were generated from this promo
   const awards = await prisma.freePlayAward.count({
     where: { promoId },
   });
@@ -306,4 +350,29 @@ export async function deletePromo(promoId: string) {
 
   await prisma.promo.delete({ where: { id: promoId } });
   revalidatePath(`/weeks/${promo.weekId}`);
+}
+
+// ── Admin ──
+
+export async function createGroupWithOperator(data: {
+  groupName: string;
+  operatorName: string;
+  operatorPassword: string;
+}) {
+  const session = await requireSession();
+  if (!session.isAdmin) throw new Error("Admin only");
+
+  const group = await prisma.group.create({
+    data: { name: data.groupName },
+  });
+
+  await prisma.operator.create({
+    data: {
+      groupId: group.id,
+      name: data.operatorName,
+      password: data.operatorPassword,
+    },
+  });
+
+  revalidatePath("/admin");
 }

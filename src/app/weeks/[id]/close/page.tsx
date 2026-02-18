@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { requireWeekAccess } from "@/lib/auth";
 import Link from "next/link";
 import { CloseWeekButton } from "./close-week-button";
 import { computePromoResults, type LossRebateRule } from "@/lib/promo-engine";
@@ -10,6 +10,8 @@ export default async function CloseWeekPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireWeekAccess(id);
+
   const week = await prisma.week.findUnique({
     where: { id },
     include: {
@@ -17,7 +19,7 @@ export default async function CloseWeekPage({
     },
   });
 
-  if (!week) notFound();
+  if (!week) return null;
 
   if (week.status === "CLOSED") {
     return (

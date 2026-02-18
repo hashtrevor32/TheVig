@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { requireWeekAccess } from "@/lib/auth";
 import Link from "next/link";
 import { PromoListClient } from "./promo-list-client";
 
@@ -9,6 +9,8 @@ export default async function PromosPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireWeekAccess(id);
+
   const week = await prisma.week.findUnique({
     where: { id },
     include: {
@@ -16,7 +18,7 @@ export default async function PromosPage({
     },
   });
 
-  if (!week) notFound();
+  if (!week) return null;
 
   return (
     <div className="space-y-6">

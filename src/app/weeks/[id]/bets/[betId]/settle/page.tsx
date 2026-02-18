@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireWeekAccess } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SettleForm } from "./settle-form";
@@ -9,6 +10,7 @@ export default async function SettleBetPage({
   params: Promise<{ id: string; betId: string }>;
 }) {
   const { id, betId } = await params;
+  await requireWeekAccess(id);
 
   const bet = await prisma.bet.findUnique({
     where: { id: betId },
