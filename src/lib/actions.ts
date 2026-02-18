@@ -409,8 +409,6 @@ export async function createBulkBets(data: {
     stakeCashUnits: number;
     stakeFreePlayUnits?: number;
     placedAt?: string;
-    settled?: "WIN" | "LOSS" | "PUSH";
-    payoutCashUnits?: number;
   }[];
 }) {
   await verifyWeekOwnership(data.weekId);
@@ -432,8 +430,6 @@ export async function createBulkBets(data: {
   // For FP bets from scans, don't block on insufficient balance — the bet was already placed.
   // Just deduct what we can after creation.
 
-  const now = new Date();
-
   await prisma.$transaction(
     data.bets.map((bet) => {
       // Safely parse placedAt — AI may return non-standard date strings
@@ -443,9 +439,7 @@ export async function createBulkBets(data: {
         if (!isNaN(d.getTime())) parsedPlacedAt = d;
       }
 
-      // If the bet is pre-settled (from screenshot/text), create it already settled
-      const isSettled = !!bet.settled;
-
+      // Always create as OPEN — settling is done separately via quickSettle/autoSettle
       return prisma.bet.create({
         data: {
           weekId: data.weekId,
@@ -458,12 +452,6 @@ export async function createBulkBets(data: {
           stakeCashUnits: bet.stakeCashUnits,
           stakeFreePlayUnits: bet.stakeFreePlayUnits ?? 0,
           ...(parsedPlacedAt ? { placedAt: parsedPlacedAt } : {}),
-          ...(isSettled ? {
-            status: "SETTLED" as const,
-            result: bet.settled!,
-            payoutCashUnits: bet.payoutCashUnits ?? 0,
-            settledAt: now,
-          } : {}),
         },
       });
     })

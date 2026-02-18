@@ -380,37 +380,9 @@ export function AddBetForm({
             betStake = b.stake > 0 ? Math.round(b.stake) : stake;
           }
 
-          // Calculate payout for pre-settled bets
-          let settled: "WIN" | "LOSS" | "PUSH" | undefined;
-          let payoutCashUnits: number | undefined;
-          if (b.settled) {
-            settled = b.settled;
-            if (b.settled === "LOSS") {
-              payoutCashUnits = 0;
-            } else if (b.settled === "PUSH") {
-              // Push: cash bets get stake back, FP bets get nothing back
-              payoutCashUnits = betIsFP ? 0 : betStake;
-            } else if (b.settled === "WIN") {
-              if (b.profitAmount != null && b.profitAmount > 0) {
-                // AI gave us the profit — for cash bets: stake + profit, for FP: just profit
-                payoutCashUnits = betIsFP
-                  ? Math.round(b.profitAmount)
-                  : betStake + Math.round(b.profitAmount);
-              } else {
-                // Calculate winnings from odds
-                const odds = Math.round(b.oddsAmerican);
-                let winnings: number;
-                if (odds > 0) {
-                  winnings = Math.round((betStake * odds) / 100);
-                } else {
-                  winnings = Math.round((betStake * 100) / Math.abs(odds));
-                }
-                // Cash bet: stake + winnings. FP bet: just winnings (stake not returned).
-                payoutCashUnits = betIsFP ? winnings : betStake + winnings;
-              }
-            }
-          }
-
+          // Always create as OPEN — never auto-settle from scans.
+          // The AI sometimes incorrectly detects open bets as settled.
+          // User can settle via quickSettle buttons or auto-settle feature.
           return {
             description: b.description,
             eventKey: b.eventKey || undefined,
@@ -420,7 +392,6 @@ export function AddBetForm({
             stakeCashUnits: betIsFP ? 0 : betStake,
             stakeFreePlayUnits: betIsFP ? betStake : 0,
             placedAt: b.placedAt || undefined,
-            ...(settled ? { settled, payoutCashUnits } : {}),
           };
         }),
       });
@@ -442,9 +413,7 @@ export function AddBetForm({
         [memberId]: [...(prev[memberId] || []), ...addedForMember],
       }));
 
-      const settledCount = parsedBets.filter(b => b.settled).length;
-      const settledMsg = settledCount > 0 ? ` (${settledCount} auto-settled)` : "";
-      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!${settledMsg}`);
+      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!`);
       setParsedBets([]);
       setAllScannedBets([]);
       setDescription("");
