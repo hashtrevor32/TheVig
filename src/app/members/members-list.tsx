@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { createMember, updateMember } from "@/lib/actions";
+import { createMember, updateMember, deleteMember } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Check, X } from "lucide-react";
+import { SwipeToDelete } from "@/components/swipe-to-delete";
 
 type Member = { id: string; name: string; createdAt: Date };
 
@@ -37,53 +38,58 @@ export function MembersList({ members }: { members: Member[] }) {
   return (
     <div className="space-y-3">
       {members.map((m) => (
-        <div
+        <SwipeToDelete
           key={m.id}
-          className="bg-gray-900 rounded-lg border border-gray-800 p-3 flex items-center gap-3"
+          onDelete={async () => {
+            await deleteMember(m.id);
+            router.refresh();
+          }}
         >
-          <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
-            {m.name[0]}
-          </div>
+          <div className="bg-gray-900 rounded-lg border border-gray-800 p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
+              {m.name[0]}
+            </div>
 
-          {editingId === m.id ? (
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-                onKeyDown={(e) => e.key === "Enter" && handleEdit(m.id)}
-              />
-              <button
-                onClick={() => handleEdit(m.id)}
-                disabled={loading}
-                className="p-1.5 text-green-400 hover:bg-gray-800 rounded"
-              >
-                <Check size={16} />
-              </button>
-              <button
-                onClick={() => setEditingId(null)}
-                className="p-1.5 text-gray-400 hover:bg-gray-800 rounded"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-between">
-              <span className="text-white font-medium">{m.name}</span>
-              <button
-                onClick={() => {
-                  setEditingId(m.id);
-                  setEditName(m.name);
-                }}
-                className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded"
-              >
-                <Pencil size={14} />
-              </button>
-            </div>
-          )}
-        </div>
+            {editingId === m.id ? (
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleEdit(m.id)}
+                />
+                <button
+                  onClick={() => handleEdit(m.id)}
+                  disabled={loading}
+                  className="p-1.5 text-green-400 hover:bg-gray-800 rounded"
+                >
+                  <Check size={16} />
+                </button>
+                <button
+                  onClick={() => setEditingId(null)}
+                  className="p-1.5 text-gray-400 hover:bg-gray-800 rounded"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-between">
+                <span className="text-white font-medium">{m.name}</span>
+                <button
+                  onClick={() => {
+                    setEditingId(m.id);
+                    setEditName(m.name);
+                  }}
+                  className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </SwipeToDelete>
       ))}
 
       {showAdd ? (

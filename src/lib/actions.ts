@@ -46,6 +46,21 @@ export async function updateMember(id: string, name: string) {
   revalidatePath("/members");
 }
 
+export async function deleteMember(id: string) {
+  const groupId = await getGroupId();
+  const member = await prisma.member.findUnique({ where: { id } });
+  if (!member || member.groupId !== groupId) throw new Error("Member not found");
+
+  // Delete all related records (no cascade in schema)
+  await prisma.weekStatement.deleteMany({ where: { memberId: id } });
+  await prisma.freePlayAward.deleteMany({ where: { memberId: id } });
+  await prisma.bet.deleteMany({ where: { memberId: id } });
+  await prisma.weekMember.deleteMany({ where: { memberId: id } });
+  await prisma.member.delete({ where: { id } });
+
+  revalidatePath("/members");
+}
+
 // ── Weeks ──
 
 export async function createWeek(data: {
