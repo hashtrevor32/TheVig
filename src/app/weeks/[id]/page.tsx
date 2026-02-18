@@ -52,6 +52,41 @@ export default async function WeekDashboardPage({
       .filter((a) => a.memberId === wm.memberId && a.status === "EARNED")
       .reduce((s, a) => s + a.amountUnits, 0);
 
+    // Compute promo progress for each active promo
+    const promoProgress = week.promos.map((p) => {
+      const rule = p.ruleJson as unknown as LossRebateRule;
+      const windowStart = new Date(rule.windowStart);
+      const windowEnd = new Date(rule.windowEnd);
+
+      const eligibleBets = memberBets.filter((b) => {
+        const placed = new Date(b.placedAt);
+        if (placed < windowStart || placed > windowEnd) return false;
+        if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
+        if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
+        if (b.stakeCashUnits <= 0) return false;
+        return true;
+      });
+
+      const eligibleHandle = eligibleBets.reduce(
+        (s, b) => s + b.stakeCashUnits,
+        0
+      );
+      const handleProgress =
+        rule.minHandleUnits > 0
+          ? Math.min(100, (eligibleHandle / rule.minHandleUnits) * 100)
+          : 100;
+      const qualified = handleProgress >= 100;
+
+      return {
+        promoId: p.id,
+        promoName: p.name,
+        minHandle: rule.minHandleUnits,
+        currentHandle: eligibleHandle,
+        handleProgress,
+        qualified,
+      };
+    });
+
     return {
       memberId: wm.memberId,
       memberName: wm.member.name,
@@ -62,6 +97,7 @@ export default async function WeekDashboardPage({
       cashPL,
       freePlay,
       freePlayBalance: wm.member.freePlayBalance,
+      promoProgress,
     };
   });
 

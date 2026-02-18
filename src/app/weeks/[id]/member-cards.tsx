@@ -5,6 +5,15 @@ import { updateCreditLimit, setFreePlayBalance } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+type PromoProgress = {
+  promoId: string;
+  promoName: string;
+  minHandle: number;
+  currentHandle: number;
+  handleProgress: number;
+  qualified: boolean;
+};
+
 type MemberStat = {
   memberId: string;
   memberName: string;
@@ -15,6 +24,7 @@ type MemberStat = {
   cashPL: number;
   freePlay: number;
   freePlayBalance: number;
+  promoProgress: PromoProgress[];
 };
 
 export function MemberCards({
@@ -225,6 +235,63 @@ function MemberCard({
           </span>
         )}
       </div>
+
+      {/* Promo Progress */}
+      {ms.promoProgress.length > 0 && (
+        <div className="space-y-1.5">
+          {ms.promoProgress.map((pp) => (
+            <div key={pp.promoId} className="flex items-center gap-2">
+              {pp.qualified ? (
+                <svg
+                  className="w-3.5 h-3.5 text-green-400 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-yellow-500/60" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-[11px] truncate ${
+                      pp.qualified ? "text-green-400" : "text-gray-500"
+                    }`}
+                  >
+                    {pp.promoName}
+                  </span>
+                  <span
+                    className={`text-[11px] shrink-0 ml-2 ${
+                      pp.qualified ? "text-green-400" : "text-gray-500"
+                    }`}
+                  >
+                    {pp.currentHandle}/{pp.minHandle}
+                  </span>
+                </div>
+                {!pp.qualified && pp.minHandle > 0 && (
+                  <div className="h-1 bg-gray-800 rounded-full overflow-hidden mt-0.5">
+                    <div
+                      className="h-full bg-yellow-500/60 rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(pp.handleProgress, 100)}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Link
         href={`/weeks/${weekId}/members/${ms.memberId}`}
