@@ -149,13 +149,18 @@ function calculatePayout(
   result: "WIN" | "LOSS" | "PUSH"
 ): number {
   if (result === "LOSS") return 0;
-  if (result === "PUSH") return stakeCash;
-  // WIN
+  const isFP = stakeFP > 0 && stakeCash === 0;
+  if (result === "PUSH") return isFP ? 0 : stakeCash;
+  // WIN: calculate winnings from total stake, but FP bets don't get stake back
   const totalStake = stakeCash + stakeFP;
+  let winnings: number;
   if (odds > 0) {
-    return totalStake + Math.round((totalStake * odds) / 100);
+    winnings = Math.round((totalStake * odds) / 100);
+  } else {
+    winnings = Math.round((totalStake * 100) / Math.abs(odds));
   }
-  return totalStake + Math.round((totalStake * 100) / Math.abs(odds));
+  // Cash bet: stake + winnings. FP bet: just winnings (stake not returned).
+  return isFP ? winnings : stakeCash + winnings;
 }
 
 export async function GET(req: NextRequest) {

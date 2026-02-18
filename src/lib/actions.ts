@@ -247,16 +247,21 @@ export async function quickSettle(
   if (bet.week.groupId !== groupId) throw new Error("Bet not found");
 
   let payoutCashUnits = 0;
+  const isFP = bet.stakeFreePlayUnits > 0 && bet.stakeCashUnits === 0;
   if (result === "PUSH") {
-    payoutCashUnits = bet.stakeCashUnits;
+    // Cash bets get stake back; FP bets get nothing back on push
+    payoutCashUnits = isFP ? 0 : bet.stakeCashUnits;
   } else if (result === "WIN") {
-    // Auto-calculate payout from American odds
-    const stake = bet.stakeCashUnits + bet.stakeFreePlayUnits;
+    // Calculate winnings from American odds using total stake
+    const totalStake = bet.stakeCashUnits + bet.stakeFreePlayUnits;
+    let winnings: number;
     if (bet.oddsAmerican > 0) {
-      payoutCashUnits = stake + Math.round((stake * bet.oddsAmerican) / 100);
+      winnings = Math.round((totalStake * bet.oddsAmerican) / 100);
     } else {
-      payoutCashUnits = stake + Math.round((stake * 100) / Math.abs(bet.oddsAmerican));
+      winnings = Math.round((totalStake * 100) / Math.abs(bet.oddsAmerican));
     }
+    // Cash bet: stake + winnings. FP bet: just winnings (stake not returned).
+    payoutCashUnits = isFP ? winnings : bet.stakeCashUnits + winnings;
   }
 
   await prisma.bet.update({

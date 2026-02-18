@@ -28,9 +28,17 @@ type Bet = {
   placedAt: string;
 };
 
-function calculateDefaultPayout(stake: number, odds: number): number {
-  if (odds > 0) return stake + Math.round((stake * odds) / 100);
-  return stake + Math.round((stake * 100) / Math.abs(odds));
+function calculateDefaultPayout(bet: Bet): number {
+  const isFP = bet.stakeFreePlayUnits > 0 && bet.stakeCashUnits === 0;
+  const totalStake = bet.stakeCashUnits + bet.stakeFreePlayUnits;
+  let winnings: number;
+  if (bet.oddsAmerican > 0) {
+    winnings = Math.round((totalStake * bet.oddsAmerican) / 100);
+  } else {
+    winnings = Math.round((totalStake * 100) / Math.abs(bet.oddsAmerican));
+  }
+  // Cash bet: stake + winnings. FP bet: just winnings (stake not returned).
+  return isFP ? winnings : bet.stakeCashUnits + winnings;
 }
 
 export function MemberBets({
@@ -83,10 +91,12 @@ export function MemberBets({
     setSettling(true);
     const settlements = [...selected].map((betId) => {
       const bet = openBets.find((b) => b.id === betId)!;
+      const isFP = bet.stakeFreePlayUnits > 0 && bet.stakeCashUnits === 0;
       return {
         betId,
         result: result as "WIN" | "LOSS" | "PUSH",
-        payoutCashUnits: result === "LOSS" ? 0 : bet.stakeCashUnits,
+        // LOSS = 0, PUSH = stake back (but FP gets nothing back on push)
+        payoutCashUnits: result === "LOSS" ? 0 : (isFP ? 0 : bet.stakeCashUnits),
       };
     });
     await bulkSettle(settlements);
@@ -111,9 +121,7 @@ export function MemberBets({
     const defaults: Record<string, string> = {};
     for (const betId of selected) {
       const bet = openBets.find((b) => b.id === betId)!;
-      defaults[betId] = String(
-        calculateDefaultPayout(bet.stakeCashUnits, bet.oddsAmerican)
-      );
+      defaults[betId] = String(calculateDefaultPayout(bet));
     }
     setWinPayouts(defaults);
     setBulkWin(true);
@@ -196,14 +204,13 @@ export function MemberBets({
       .filter((s) => acceptedIds.has(s.betId) && s.result !== "SKIP")
       .map((s) => {
         const bet = openBets.find((b) => b.id === s.betId)!;
+        const isFP = bet.stakeFreePlayUnits > 0 && bet.stakeCashUnits === 0;
         let payoutCashUnits = 0;
         if (s.result === "WIN") {
-          payoutCashUnits = calculateDefaultPayout(
-            bet.stakeCashUnits,
-            bet.oddsAmerican
-          );
+          payoutCashUnits = calculateDefaultPayout(bet);
         } else if (s.result === "PUSH") {
-          payoutCashUnits = bet.stakeCashUnits;
+          // Cash bets get stake back; FP bets get nothing on push
+          payoutCashUnits = isFP ? 0 : bet.stakeCashUnits;
         }
         return {
           betId: s.betId,
