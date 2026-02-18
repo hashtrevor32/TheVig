@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { updateCreditLimit, setFreePlayBalance } from "@/lib/actions";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type MemberStat = {
   memberId: string;
@@ -100,7 +101,10 @@ function MemberCard({
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <Link
+        href={`/weeks/${weekId}/members/${ms.memberId}`}
+        className="flex items-center justify-between hover:opacity-80 transition-opacity"
+      >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white">
             {ms.memberName[0]}
@@ -124,7 +128,7 @@ function MemberCard({
             <p className="text-xs text-blue-400">+{ms.freePlay} free play</p>
           )}
         </div>
-      </div>
+      </Link>
 
       {/* Credit Meter */}
       <div>
@@ -222,9 +226,13 @@ function MemberCard({
         )}
       </div>
 
-      <div className="flex gap-2 text-xs text-gray-500">
+      <Link
+        href={`/weeks/${weekId}/members/${ms.memberId}`}
+        className="flex items-center justify-between text-xs text-gray-500 hover:text-gray-300 transition-colors"
+      >
         <span>{ms.openBetsCount} open bets</span>
-      </div>
+        <span className="text-gray-600">&rarr;</span>
+      </Link>
     </div>
   );
 }
