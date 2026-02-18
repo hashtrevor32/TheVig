@@ -146,6 +146,13 @@ export async function createBet(data: {
     }
   }
 
+  // Safely parse placedAt — AI may return non-standard date strings
+  let parsedPlacedAt: Date | undefined;
+  if (data.placedAt) {
+    const d = new Date(data.placedAt);
+    if (!isNaN(d.getTime())) parsedPlacedAt = d;
+  }
+
   await prisma.bet.create({
     data: {
       weekId: data.weekId,
@@ -155,7 +162,7 @@ export async function createBet(data: {
       oddsAmerican: data.oddsAmerican,
       stakeCashUnits: data.stakeCashUnits,
       stakeFreePlayUnits: fpStake,
-      ...(data.placedAt ? { placedAt: new Date(data.placedAt) } : {}),
+      ...(parsedPlacedAt ? { placedAt: parsedPlacedAt } : {}),
     },
   });
 
@@ -357,8 +364,14 @@ export async function createBulkBets(data: {
   }
 
   await prisma.$transaction(
-    data.bets.map((bet) =>
-      prisma.bet.create({
+    data.bets.map((bet) => {
+      // Safely parse placedAt — AI may return non-standard date strings
+      let parsedPlacedAt: Date | undefined;
+      if (bet.placedAt) {
+        const d = new Date(bet.placedAt);
+        if (!isNaN(d.getTime())) parsedPlacedAt = d;
+      }
+      return prisma.bet.create({
         data: {
           weekId: data.weekId,
           memberId: data.memberId,
@@ -367,10 +380,10 @@ export async function createBulkBets(data: {
           oddsAmerican: bet.oddsAmerican,
           stakeCashUnits: bet.stakeCashUnits,
           stakeFreePlayUnits: bet.stakeFreePlayUnits ?? 0,
-          ...(bet.placedAt ? { placedAt: new Date(bet.placedAt) } : {}),
+          ...(parsedPlacedAt ? { placedAt: parsedPlacedAt } : {}),
         },
-      })
-    )
+      });
+    })
   );
 
   if (totalFPStake > 0) {

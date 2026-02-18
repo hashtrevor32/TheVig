@@ -50,7 +50,12 @@ export default async function BetsPage({
           <p className="text-gray-400">No bets yet.</p>
         </div>
       ) : (
-        <BetsList bets={week.bets} weekId={id} weekStatus={week.status} />
+        <BetsList bets={week.bets.map(b => ({
+          ...b,
+          placedAt: b.placedAt.toISOString(),
+          createdAt: b.createdAt.toISOString(),
+          settledAt: b.settledAt ? b.settledAt.toISOString() : null,
+        }))} weekId={id} weekStatus={week.status} />
       )}
     </div>
   );

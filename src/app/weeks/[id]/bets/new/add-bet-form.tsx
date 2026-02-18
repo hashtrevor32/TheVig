@@ -293,14 +293,17 @@ export function AddBetForm({
         weekId,
         memberId,
         overrideCredit: isFreePlay || overrideCredit,
-        bets: parsedBets.map((b) => ({
-          description: b.description,
-          eventKey: b.eventKey || undefined,
-          oddsAmerican: b.oddsAmerican,
-          stakeCashUnits: isFreePlay ? 0 : (b.stake > 0 ? b.stake : stake),
-          stakeFreePlayUnits: isFreePlay ? (b.stake > 0 ? b.stake : stake) : 0,
-          placedAt: b.placedAt || undefined,
-        })),
+        bets: parsedBets.map((b) => {
+          const betStake = b.stake > 0 ? Math.round(b.stake) : stake;
+          return {
+            description: b.description,
+            eventKey: b.eventKey || undefined,
+            oddsAmerican: Math.round(b.oddsAmerican),
+            stakeCashUnits: isFreePlay ? 0 : betStake,
+            stakeFreePlayUnits: isFreePlay ? betStake : 0,
+            placedAt: b.placedAt || undefined,
+          };
+        }),
       });
 
       setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!`);

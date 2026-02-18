@@ -25,7 +25,7 @@ type Bet = {
   status: string;
   result: string | null;
   payoutCashUnits: number | null;
-  placedAt: Date;
+  placedAt: string;
 };
 
 function calculateDefaultPayout(stake: number, odds: number): number {
