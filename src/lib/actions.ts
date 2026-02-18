@@ -305,6 +305,27 @@ export async function editBet(data: {
   revalidatePath(`/weeks/${bet.weekId}`);
 }
 
+export async function deleteBet(betId: string) {
+  const bet = await prisma.bet.findUnique({
+    where: { id: betId },
+    include: { week: true },
+  });
+  if (!bet) throw new Error("Bet not found");
+  const groupId = await getGroupId();
+  if (bet.week.groupId !== groupId) throw new Error("Bet not found");
+
+  // Return FP to member balance if it was a free play bet
+  if (bet.stakeFreePlayUnits > 0 && bet.status === "OPEN") {
+    await prisma.member.update({
+      where: { id: bet.memberId },
+      data: { freePlayBalance: { increment: bet.stakeFreePlayUnits } },
+    });
+  }
+
+  await prisma.bet.delete({ where: { id: betId } });
+  revalidatePath(`/weeks/${bet.weekId}`);
+}
+
 export async function voidBet(betId: string) {
   const bet = await prisma.bet.findUnique({
     where: { id: betId },

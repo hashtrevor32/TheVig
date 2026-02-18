@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { quickSettle, bulkSettle } from "@/lib/actions";
+import { quickSettle, bulkSettle, deleteBet } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Zap, Check, X, SkipForward } from "lucide-react";
+import { Loader2, Zap, Check, X, SkipForward, Trash2 } from "lucide-react";
 
 type AutoSettleSuggestion = {
   betId: string;
@@ -558,6 +558,8 @@ function OpenBetCard({
   onToggle: () => void;
 }) {
   const [settling, setSettling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const router = useRouter();
 
   async function handleQuickSettle(result: "LOSS" | "PUSH" | "WIN") {
@@ -565,6 +567,21 @@ function OpenBetCard({
     await quickSettle(bet.id, result);
     router.refresh();
     setSettling(false);
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteBet(bet.id);
+      router.refresh();
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
   }
 
   return (
@@ -652,9 +669,69 @@ function OpenBetCard({
           >
             Edit
           </Link>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            disabled={deleting}
+            className={`py-1.5 px-2 rounded transition-colors ${
+              confirmDelete
+                ? "bg-red-600 hover:bg-red-700 text-white"
+                : "bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400"
+            }`}
+            title={confirmDelete ? "Tap again to confirm delete" : "Delete bet"}
+          >
+            {deleting ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : confirmDelete ? (
+              <span className="text-xs font-medium">Delete?</span>
+            ) : (
+              <Trash2 size={12} />
+            )}
+          </button>
         </div>
       )}
     </div>
+  );
+}
+
+function DeleteButton({ betId }: { betId: string }) {
+  const [deleting, setDeleting] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const router = useRouter();
+
+  async function handleDelete() {
+    if (!confirm) {
+      setConfirm(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteBet(betId);
+      router.refresh();
+    } catch {
+      setDeleting(false);
+      setConfirm(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={deleting}
+      className={`py-1 px-1.5 rounded transition-colors ${
+        confirm
+          ? "bg-red-600 hover:bg-red-700 text-white"
+          : "bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400"
+      }`}
+      title={confirm ? "Tap again to confirm" : "Delete"}
+    >
+      {deleting ? (
+        <Loader2 size={11} className="animate-spin" />
+      ) : confirm ? (
+        <span className="text-[10px] font-medium">Delete?</span>
+      ) : (
+        <Trash2 size={11} />
+      )}
+    </button>
   );
 }
 
@@ -702,6 +779,7 @@ function SettledBetCard({ bet }: { bet: Bet }) {
             >
               {bet.result}
             </span>
+            <DeleteButton betId={bet.id} />
           </div>
           <p
             className={`text-xs mt-1 font-medium ${
@@ -744,9 +822,12 @@ function VoidedBetCard({ bet }: { bet: Bet }) {
             </span>
           </div>
         </div>
-        <span className="px-2 py-0.5 bg-gray-700 text-gray-500 rounded text-xs font-medium shrink-0">
-          VOIDED
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="px-2 py-0.5 bg-gray-700 text-gray-500 rounded text-xs font-medium">
+            VOIDED
+          </span>
+          <DeleteButton betId={bet.id} />
+        </div>
       </div>
     </div>
   );
