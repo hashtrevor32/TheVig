@@ -48,6 +48,7 @@ export default async function WeekDashboardPage({
       (s, b) => s + ((b.payoutCashUnits ?? 0) - b.stakeCashUnits),
       0
     );
+    // No additional calculation needed — cashPL already computed above
     const freePlay = week.freePlayAwards
       .filter((a) => a.memberId === wm.memberId && a.status === "EARNED")
       .reduce((s, a) => s + a.amountUnits, 0);
@@ -93,7 +94,7 @@ export default async function WeekDashboardPage({
       memberName: wm.member.name,
       creditLimit: wm.creditLimitUnits,
       openExposure,
-      availableCredit: wm.creditLimitUnits - openExposure,
+      availableCredit: wm.creditLimitUnits + cashPL - openExposure,
       openBetsCount: openBets.length,
       cashPL,
       freePlay,

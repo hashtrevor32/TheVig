@@ -25,6 +25,7 @@ export default async function AddBetPage({
   if (!week || week.status !== "OPEN") notFound();
 
   const openBets = week.bets.filter((b) => b.status === "OPEN");
+  const settledBets = week.bets.filter((b) => b.status === "SETTLED");
   const nonVoidedBets = week.bets.filter((b) => b.status !== "VOIDED");
 
   const membersWithCredit = week.weekMembers.map((wm) => {
@@ -32,12 +33,17 @@ export default async function AddBetPage({
       .filter((b) => b.memberId === wm.memberId)
       .reduce((s, b) => s + b.stakeCashUnits, 0);
 
+    // Cash P&L from settled bets — wins restore credit, losses consume it
+    const cashPL = settledBets
+      .filter((b) => b.memberId === wm.memberId)
+      .reduce((s, b) => s + ((b.payoutCashUnits ?? 0) - b.stakeCashUnits), 0);
+
     return {
       id: wm.memberId,
       name: wm.member.name,
       creditLimit: wm.creditLimitUnits,
       openExposure,
-      availableCredit: wm.creditLimitUnits - openExposure,
+      availableCredit: wm.creditLimitUnits + cashPL - openExposure,
       freePlayBalance: wm.member.freePlayBalance,
     };
   });

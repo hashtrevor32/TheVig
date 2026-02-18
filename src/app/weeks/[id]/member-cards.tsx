@@ -84,8 +84,10 @@ function MemberCard({
   const [savingFP, setSavingFP] = useState(false);
   const router = useRouter();
 
+  // Used = creditLimit - availableCredit (accounts for open bets + P&L)
+  const totalUsed = ms.creditLimit - ms.availableCredit;
   const pct =
-    ms.creditLimit > 0 ? (ms.openExposure / ms.creditLimit) * 100 : 0;
+    ms.creditLimit > 0 ? Math.max(0, (totalUsed / ms.creditLimit) * 100) : 0;
   const barColor =
     pct < 50 ? "bg-green-500" : pct < 80 ? "bg-yellow-500" : "bg-red-500";
 
@@ -188,7 +190,7 @@ function MemberCard({
               className={weekStatus === "OPEN" ? "cursor-pointer hover:text-gray-300" : ""}
               onClick={() => weekStatus === "OPEN" && setEditing(true)}
             >
-              {ms.openExposure} / {ms.creditLimit} used
+              {Math.max(0, totalUsed)} / {ms.creditLimit} used
               {weekStatus === "OPEN" && (
                 <span className="ml-1 text-blue-400/60">&#9998;</span>
               )}

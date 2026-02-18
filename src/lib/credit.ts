@@ -14,6 +14,30 @@ export async function getOpenExposure(weekId: string, memberId: string): Promise
   return result._sum.stakeCashUnits ?? 0;
 }
 
+/**
+ * Cash P&L from settled bets = sum of (payout - stake).
+ * Positive = net winnings, negative = net losses.
+ * This adjusts the credit balance like a running account.
+ */
+export async function getSettledCashPL(weekId: string, memberId: string): Promise<number> {
+  const settledBets = await prisma.bet.findMany({
+    where: {
+      weekId,
+      memberId,
+      status: "SETTLED",
+    },
+    select: {
+      stakeCashUnits: true,
+      payoutCashUnits: true,
+    },
+  });
+
+  return settledBets.reduce(
+    (sum, b) => sum + ((b.payoutCashUnits ?? 0) - b.stakeCashUnits),
+    0
+  );
+}
+
 export async function getCreditInfo(weekId: string, memberId: string) {
   const weekMember = await prisma.weekMember.findUnique({
     where: { weekId_memberId: { weekId, memberId } },
@@ -21,15 +45,19 @@ export async function getCreditInfo(weekId: string, memberId: string) {
   });
 
   if (!weekMember) {
-    return { creditLimit: 0, openExposure: 0, availableCredit: 0, freePlayBalance: 0 };
+    return { creditLimit: 0, openExposure: 0, cashPL: 0, availableCredit: 0, freePlayBalance: 0 };
   }
 
   const openExposure = await getOpenExposure(weekId, memberId);
-  const availableCredit = weekMember.creditLimitUnits - openExposure;
+  const cashPL = await getSettledCashPL(weekId, memberId);
+  // Credit works like a running balance: starts at creditLimit,
+  // goes down with open bets and losses, goes back up with wins
+  const availableCredit = weekMember.creditLimitUnits + cashPL - openExposure;
 
   return {
     creditLimit: weekMember.creditLimitUnits,
     openExposure,
+    cashPL,
     availableCredit,
     freePlayBalance: weekMember.member.freePlayBalance,
   };
