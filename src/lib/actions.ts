@@ -245,6 +245,24 @@ export async function createPromo(data: {
   revalidatePath(`/weeks/${data.weekId}`);
 }
 
+export async function createPromoBatch(
+  weekId: string,
+  promos: { name: string; type: "LOSS_REBATE"; ruleJson: Record<string, unknown> }[]
+) {
+  for (const p of promos) {
+    await prisma.promo.create({
+      data: {
+        weekId,
+        name: p.name,
+        type: p.type,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ruleJson: p.ruleJson as any,
+      },
+    });
+  }
+  revalidatePath(`/weeks/${weekId}`);
+}
+
 export async function updatePromo(
   promoId: string,
   data: { name?: string; ruleJson?: Record<string, unknown> }
