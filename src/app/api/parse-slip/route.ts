@@ -5,6 +5,56 @@ import { getSession } from "@/lib/auth";
 // Allow up to 60s for large images with many bets
 export const maxDuration = 60;
 
+/** Robustly extract {"bets": [...]} from AI response, handling:
+ *  - markdown code blocks
+ *  - extra text before/after JSON
+ *  - truncated JSON arrays (closes them gracefully)
+ */
+function extractBetsJson(raw: string): { bets: unknown[] } {
+  let str = raw.trim();
+
+  // Strip markdown code fences
+  if (str.startsWith("```")) {
+    str = str.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  }
+
+  // Try direct parse first
+  try {
+    const parsed = JSON.parse(str);
+    if (parsed && Array.isArray(parsed.bets)) return parsed;
+  } catch { /* fall through */ }
+
+  // Find the JSON object starting with {"bets"
+  const start = str.indexOf('{"bets"');
+  if (start === -1) return { bets: [] };
+
+  let jsonStr = str.slice(start);
+
+  // Try parsing as-is
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && Array.isArray(parsed.bets)) return parsed;
+  } catch { /* fall through */ }
+
+  // Handle truncated JSON — find the last complete object in the array
+  const lastCompleteObj = jsonStr.lastIndexOf("}");
+  if (lastCompleteObj > 0) {
+    const trimmed = jsonStr.slice(0, lastCompleteObj + 1) + "]}";
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && Array.isArray(parsed.bets)) return parsed;
+    } catch { /* fall through */ }
+
+    const withoutTrailingComma = jsonStr.slice(0, lastCompleteObj + 1).replace(/,\s*$/, "") + "]}";
+    try {
+      const parsed = JSON.parse(withoutTrailingComma);
+      if (parsed && Array.isArray(parsed.bets)) return parsed;
+    } catch { /* fall through */ }
+  }
+
+  return { bets: [] };
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -107,13 +157,7 @@ If you cannot identify any bets in the image, respond with: {"bets": []}`,
       return NextResponse.json({ bets: [] });
     }
 
-    // Extract JSON from response (handle markdown code blocks)
-    let jsonStr = textBlock.text.trim();
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-    }
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractBetsJson(textBlock.text);
     return NextResponse.json(parsed);
   } catch (err) {
     console.error("Parse slip error:", err);
