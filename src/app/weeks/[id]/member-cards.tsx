@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { updateCreditLimit, setFreePlayBalance } from "@/lib/actions";
+import { updateCreditLimit, setFreePlayBalance, removeMemberFromWeek } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SwipeToDelete } from "@/components/swipe-to-delete";
 
 type PromoProgress = {
   promoId: string;
@@ -36,6 +37,8 @@ export function MemberCards({
   weekId: string;
   weekStatus: string;
 }) {
+  const router = useRouter();
+
   return (
     <div>
       <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">
@@ -43,12 +46,21 @@ export function MemberCards({
       </h3>
       <div className="space-y-3">
         {memberStats.map((ms) => (
-          <MemberCard
+          <SwipeToDelete
             key={ms.memberId}
-            ms={ms}
-            weekId={weekId}
-            weekStatus={weekStatus}
-          />
+            disabled={weekStatus !== "OPEN"}
+            label="Remove"
+            onDelete={async () => {
+              await removeMemberFromWeek(weekId, ms.memberId);
+              router.refresh();
+            }}
+          >
+            <MemberCard
+              ms={ms}
+              weekId={weekId}
+              weekStatus={weekStatus}
+            />
+          </SwipeToDelete>
         ))}
       </div>
     </div>

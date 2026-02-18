@@ -6,15 +6,28 @@ import { CreatePromoForm } from "./create-promo-form";
 
 export default async function NewPromoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ suggest?: string }>;
 }) {
   const { id } = await params;
+  const { suggest } = await searchParams;
   await requireWeekAccess(id);
 
-  const week = await prisma.week.findUnique({ where: { id } });
+  const week = await prisma.week.findUnique({
+    where: { id },
+    include: {
+      promos: {
+        select: { name: true },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
 
   if (!week || week.status !== "OPEN") notFound();
+
+  const existingPromoNames = week.promos.map((p) => p.name);
 
   return (
     <div className="space-y-6">
@@ -32,6 +45,8 @@ export default async function NewPromoPage({
         weekId={id}
         weekStart={week.startAt.toISOString()}
         weekEnd={week.endAt.toISOString()}
+        existingPromoNames={existingPromoNames}
+        autoSuggest={suggest === "true"}
       />
     </div>
   );

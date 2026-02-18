@@ -33,12 +33,20 @@ export default async function PromosPage({
       </div>
 
       {week.status === "OPEN" && (
-        <Link
-          href={`/weeks/${id}/promos/new`}
-          className="block w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-center transition-colors"
-        >
-          Create Promo
-        </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href={`/weeks/${id}/promos/new`}
+            className="py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-center transition-colors text-sm"
+          >
+            Create Promo
+          </Link>
+          <Link
+            href={`/weeks/${id}/promos/new?suggest=true`}
+            className="py-3 bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/30 hover:to-blue-600/30 text-purple-400 font-medium rounded-lg text-center transition-colors text-sm border border-purple-500/20"
+          >
+            Suggest Promos
+          </Link>
+        </div>
       )}
 
       {week.promos.length === 0 ? (

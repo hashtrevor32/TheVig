@@ -20,6 +20,8 @@ type ParsedBet = {
   stake: number;
   isFreePlay?: boolean;
   eventKey: string;
+  sport?: string;
+  betType?: string;
   placedAt: string | null;
   settled?: "WIN" | "LOSS" | "PUSH" | null;
   profitAmount?: number | null;
@@ -45,6 +47,8 @@ export function AddBetForm({
   const [memberId, setMemberId] = useState("");
   const [description, setDescription] = useState("");
   const [eventKey, setEventKey] = useState("");
+  const [sport, setSport] = useState("");
+  const [betType, setBetType] = useState("");
   const [oddsAmerican, setOddsAmerican] = useState("");
   const [stakeCashUnits, setStakeCashUnits] = useState("");
   const [placedAt, setPlacedAt] = useState<string | null>(null);
@@ -71,6 +75,9 @@ export function AddBetForm({
   // Bulk add state
   const [addingAll, setAddingAll] = useState(false);
   const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
+
+  // Track bets added in this session for duplicate detection across scans
+  const [sessionAddedBets, setSessionAddedBets] = useState<Record<string, ExistingBet[]>>({});
 
   const selectedMember = members.find((m) => m.id === memberId);
   const stake = parseInt(stakeCashUnits) || 0;
@@ -129,40 +136,48 @@ export function AddBetForm({
         (existDescNorm.includes(betDescNorm) || betDescNorm.includes(existDescNorm));
 
       const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
+      const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
+      const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
 
-      // PRIMARY: timestamp is the key identifier.
-      // A member CAN legitimately place the same bet twice seconds apart.
-      // Only flag as duplicate if the placed timestamps match within 3 seconds.
-      if (bet.placedAt && existing.placedAt && (descExact || descFuzzy) && oddsMatch) {
+      // If description and odds don't match, it's definitely not a duplicate
+      if (!(descExact || descFuzzy) || !oddsMatch) return false;
+
+      // TIER 1: Both have timestamps — check if close enough
+      if (bet.placedAt && existing.placedAt) {
         try {
           const scannedTime = new Date(bet.placedAt).getTime();
           const existingTime = new Date(existing.placedAt).getTime();
-          // Same bet = same timestamp (within 3s — timestamps are down to the second)
-          if (!isNaN(scannedTime) && !isNaN(existingTime) && Math.abs(scannedTime - existingTime) < 3_000) {
-            return true;
+          if (!isNaN(scannedTime) && !isNaN(existingTime)) {
+            const diffMs = Math.abs(scannedTime - existingTime);
+            // Within 60 seconds = definitely the same bet
+            if (diffMs < 60_000) return true;
+            // Within 5 minutes AND same stake = likely same bet
+            // (timestamps can vary slightly between screenshots/parsing)
+            if (diffMs < 300_000 && stakeMatch) return true;
           }
         } catch {
-          // fall through
+          // fall through to stake check
         }
-        // If both have timestamps but they differ by > 3s, it's a DIFFERENT bet
-        // even if description/odds/stake all match — don't flag as duplicate
-        return false;
       }
 
-      // FALLBACK: No timestamp on scanned bet — use description + odds + stake.
-      // This is less reliable but best we can do without a timestamp.
-      if (!bet.placedAt) {
-        const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
-        const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
-        if ((descExact || descFuzzy) && oddsMatch && stakeMatch) return true;
-      }
+      // TIER 2: No timestamp on scanned bet, or timestamp parse failed
+      // Fall back to description + odds + stake match
+      if (!bet.placedAt && stakeMatch) return true;
+
+      // TIER 3: Description + odds match AND stake matches — likely duplicate
+      // regardless of timestamp differences (covers re-scanning same slip)
+      if (stakeMatch) return true;
 
       return false;
     });
   }
 
   function filterBets(allBets: ParsedBet[], forMemberId: string) {
-    const memberExisting = forMemberId ? existingBetsByMember[forMemberId] || [] : [];
+    // Combine server-loaded existing bets with bets added this session
+    const serverBets = forMemberId ? existingBetsByMember[forMemberId] || [] : [];
+    const sessionBets = forMemberId ? sessionAddedBets[forMemberId] || [] : [];
+    const memberExisting = [...serverBets, ...sessionBets];
+
     const newBets: ParsedBet[] = [];
     const dupes: ParsedBet[] = [];
 
@@ -285,6 +300,8 @@ export function AddBetForm({
     setDescription(bet.description);
     setOddsAmerican(String(bet.oddsAmerican));
     if (bet.eventKey) setEventKey(bet.eventKey);
+    setSport(bet.sport || "");
+    setBetType(bet.betType || "");
     setPlacedAt(bet.placedAt || null);
 
     if (bet.isFreePlay) {
@@ -392,6 +409,8 @@ export function AddBetForm({
           return {
             description: b.description,
             eventKey: b.eventKey || undefined,
+            sport: b.sport || undefined,
+            betType: b.betType || undefined,
             oddsAmerican: Math.round(b.oddsAmerican),
             stakeCashUnits: betIsFP ? 0 : betStake,
             stakeFreePlayUnits: betIsFP ? betStake : 0,
@@ -400,6 +419,31 @@ export function AddBetForm({
           };
         }),
       });
+
+      // Track added bets locally for duplicate detection on subsequent scans
+      const addedForMember: ExistingBet[] = parsedBets.map((b) => {
+        const betIsFP = b.isFreePlay || isFreePlay;
+        let betStake: number;
+        if (betIsFP && b.isFreePlay) {
+          const toWin = b.stake;
+          if (b.oddsAmerican > 0) betStake = Math.round((toWin * 100) / b.oddsAmerican);
+          else betStake = Math.round((toWin * Math.abs(b.oddsAmerican)) / 100);
+          if (betStake <= 0) betStake = Math.round(toWin);
+        } else {
+          betStake = b.stake > 0 ? Math.round(b.stake) : stake;
+        }
+        return {
+          description: b.description,
+          oddsAmerican: Math.round(b.oddsAmerican),
+          stakeCashUnits: betIsFP ? 0 : betStake,
+          stakeFreePlayUnits: betIsFP ? betStake : 0,
+          placedAt: b.placedAt || "",
+        };
+      });
+      setSessionAddedBets((prev) => ({
+        ...prev,
+        [memberId]: [...(prev[memberId] || []), ...addedForMember],
+      }));
 
       const settledCount = parsedBets.filter(b => b.settled).length;
       const settledMsg = settledCount > 0 ? ` (${settledCount} auto-settled)` : "";
@@ -410,6 +454,8 @@ export function AddBetForm({
       setOddsAmerican("");
       setStakeCashUnits("");
       setEventKey("");
+      setSport("");
+      setBetType("");
       setPlacedAt(null);
       router.refresh();
     } catch (err) {
@@ -432,6 +478,8 @@ export function AddBetForm({
         memberId,
         description,
         eventKey: eventKey || undefined,
+        sport: sport || undefined,
+        betType: betType || undefined,
         oddsAmerican: parseInt(oddsAmerican),
         stakeCashUnits: isFreePlay ? 0 : stake,
         stakeFreePlayUnits: isFreePlay ? stake : 0,
@@ -721,6 +769,9 @@ export function AddBetForm({
                   <span className={`ml-1 font-medium ${b.profitAmount > 0 ? "text-green-400" : b.profitAmount < 0 ? "text-red-400" : "text-gray-400"}`}>
                     {b.profitAmount > 0 ? "+" : ""}{b.profitAmount}
                   </span>
+                )}
+                {(b.sport || b.betType) && (
+                  <span className="text-purple-400/60 ml-1">· {[b.sport, b.betType].filter(Boolean).join("/")}</span>
                 )}
                 {b.placedAt && (
                   <span className="text-gray-600 ml-1">· {b.placedAt}</span>

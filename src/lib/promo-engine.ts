@@ -1,29 +1,57 @@
 import { prisma } from "./prisma";
 
-export type LossRebateRule = {
-  windowStart: string; // ISO datetime
-  windowEnd: string;
-  minHandleUnits: number; // minimum total stake to qualify
-  percentBack: number; // percentage of losses rebated
-  capUnits: number; // max rebate amount
-  oddsMin?: number | null; // minimum American odds (e.g. -200)
-  oddsMax?: number | null; // maximum American odds
-  disqualifyBothSides: boolean; // DQ if member bet both sides of same event
-  eventKeyPattern?: string | null; // filter: only bets whose eventKey or description contains this (case-insensitive). e.g. "golf", "nfl", "nba"
-};
+// Re-export shared types from client-safe module
+export type { LossRebateRule, ParsedPromo } from "./promo-types";
+export { formatPromoRule } from "./promo-types";
 
-/** Check if a bet matches the promo's eventKeyPattern filter */
+// Import for local use
+import type { LossRebateRule } from "./promo-types";
+
+/** Check if a bet matches the promo's sport/betType filters.
+ *  Uses structured sport + betType fields on the bet, falling back to
+ *  legacy eventKeyPattern matching against eventKey + description text.
+ */
+export function matchesPromoFilter(
+  bet: { sport?: string | null; betType?: string | null; eventKey?: string | null; description: string },
+  rule: { sport?: string | null; betType?: string | null; eventKeyPattern?: string | string[] | null }
+): boolean {
+  // If promo has structured sport/betType filters, use those
+  if (rule.sport) {
+    if (!bet.sport || bet.sport.toLowerCase() !== rule.sport.toLowerCase()) return false;
+  }
+  if (rule.betType) {
+    if (!bet.betType || bet.betType.toLowerCase() !== rule.betType.toLowerCase()) return false;
+  }
+
+  // If promo has sport or betType set, those are sufficient — skip legacy pattern
+  if (rule.sport || rule.betType) return true;
+
+  // Legacy fallback: use eventKeyPattern for old promos
+  if (rule.eventKeyPattern) {
+    return matchesEventPattern(bet.eventKey ?? null, bet.description, rule.eventKeyPattern);
+  }
+
+  return true; // no filter = all bets count
+}
+
+/** Legacy: Check if a bet matches the promo's eventKeyPattern filter. */
 export function matchesEventPattern(
   eventKey: string | null,
   description: string,
-  pattern: string | null | undefined
+  pattern: string | string[] | null | undefined
 ): boolean {
-  if (!pattern) return true; // no filter = all bets count
-  const p = pattern.toLowerCase();
-  const ek = (eventKey || "").toLowerCase();
-  const desc = description.toLowerCase();
-  return ek.includes(p) || desc.includes(p);
+  if (!pattern) return true;
+  const combined = `${(eventKey || "")} ${description}`.toLowerCase();
+
+  if (Array.isArray(pattern)) {
+    if (pattern.length === 0) return true;
+    return pattern.every((kw) => combined.includes(kw.toLowerCase()));
+  }
+
+  return combined.includes(pattern.toLowerCase());
 }
+
+// ── Promo Computation ──
 
 export type PromoMemberResult = {
   memberId: string;
@@ -71,7 +99,7 @@ export async function computePromoResults(
       if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
       if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
       if (b.stakeCashUnits <= 0) return false;
-      if (!matchesEventPattern(b.eventKey, b.description, rule.eventKeyPattern)) return false;
+      if (!matchesPromoFilter(b, rule)) return false;
       return true;
     });
 

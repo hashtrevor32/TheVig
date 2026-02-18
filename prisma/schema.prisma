@@ -93,6 +93,8 @@ model Bet {
   placedAt            DateTime  @default(now())
   description         String
   eventKey            String?
+  sport               String?   // e.g. "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "casino"
+  betType             String?   // e.g. "outright", "matchup", "round-leader", "spread", "moneyline", "total", "prop", "futures", "parlay"
   oddsAmerican        Int
   stakeCashUnits      Int
   stakeFreePlayUnits  Int       @default(0)

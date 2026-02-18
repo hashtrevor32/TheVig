@@ -54,7 +54,9 @@ For each bet, provide:
 - isFreePlay: If the wager amount shown is $0.00 or "Free Bet" or "Free Play" or "Bonus Bet", set this to true. A $0 wager means it was placed using free play credits — in that case, look for the "To Win" or potential payout amount and use that as the stake instead. Otherwise false.
 
 IMPORTANT: If you see "Agent Payment" as the payment or funding source for a bet, SKIP that bet entirely — do NOT include it in the output. Agent Payment bets are free play credits given by the operator and should not be tracked as new bets.
-- eventKey: A short identifier for the game/event. MUST start with the sport/league prefix, then the event. Examples: "nfl-chiefs-bills-feb17", "nba-lakers-celtics-feb17", "golf-pga-genesis-invitational", "mlb-yankees-redsox-mar15", "nhl-bruins-rangers-feb17", "soccer-epl-liverpool-chelsea", "tennis-aus-open-djokovic-sinner", "ufc-306-main-event", "casino-blackjack", "casino-roulette". Always use lowercase with hyphens. The sport prefix is critical for tracking promo eligibility.
+- eventKey: A short identifier for the game/event. MUST start with the sport/league prefix, then the event. Examples: "nfl-chiefs-bills-feb17", "nba-lakers-celtics-feb17", "golf-pga-genesis-invitational", "mlb-yankees-redsox-mar15", "nhl-bruins-rangers-feb17", "soccer-epl-liverpool-chelsea", "tennis-aus-open-djokovic-sinner", "ufc-306-main-event", "casino-blackjack", "casino-roulette". Always use lowercase with hyphens.
+- sport: The sport or league category as a lowercase string. Examples: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "mma", "boxing", "cricket", "f1", "nascar", "pga", "lpga", "college-football", "college-basketball", "esports", "casino". Pick the most specific appropriate category.
+- betType: The type of bet as a lowercase string. Examples: "outright" (tournament/futures winner), "matchup" (head-to-head matchup or tournament matchup), "round-leader" (1st/2nd/3rd round leader), "top-finish" (top 5/10/20 finish), "spread" (point spread/handicap), "moneyline" (straight win/ML), "total" (over/under), "prop" (player prop, team prop), "futures" (season futures like MVP, championship), "parlay" (multi-leg parlay), "live" (live/in-play bet), "3-ball" (3-ball matchup in golf), "session" (casino session), "other" (anything else). Pick the most specific type that applies.
 - placedAt: The exact date/time the bet was placed if visible on the slip (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
 SETTLED/RESULT DETECTION:
@@ -79,6 +81,8 @@ Respond ONLY with valid JSON in this exact format, no other text:
       "stake": number,
       "isFreePlay": boolean,
       "eventKey": "string",
+      "sport": "string",
+      "betType": "string",
       "placedAt": "string or null",
       "settled": "WIN or LOSS or PUSH or null",
       "profitAmount": "number or null"

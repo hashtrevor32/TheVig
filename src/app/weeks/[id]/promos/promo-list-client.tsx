@@ -4,7 +4,7 @@ import { useState } from "react";
 import { togglePromo, deletePromo } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { LossRebateRule } from "@/lib/promo-engine";
+import type { LossRebateRule } from "@/lib/promo-types";
 
 type PromoItem = {
   id: string;
@@ -71,8 +71,8 @@ export function PromoListClient({
                 <p className="text-white font-medium">{p.name}</p>
                 <p className="text-gray-500 text-xs mt-0.5">
                   {rule.percentBack}% back on losses
-                  {rule.eventKeyPattern && (
-                    <span className="text-purple-400"> ({rule.eventKeyPattern})</span>
+                  {(rule.sport || rule.betType) && (
+                    <span className="text-purple-400"> ({[rule.sport, rule.betType].filter(Boolean).join(" ")})</span>
                   )}
                   {" "}&middot; Min {rule.minHandleUnits} units &middot; Cap {rule.capUnits} units
                 </p>

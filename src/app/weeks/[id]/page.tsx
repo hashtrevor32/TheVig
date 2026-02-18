@@ -3,7 +3,7 @@ import { requireWeekAccess, getGroupId } from "@/lib/auth";
 import Link from "next/link";
 import { WeekDashboardClient } from "./week-dashboard-client";
 import { MemberCards } from "./member-cards";
-import { type LossRebateRule, matchesEventPattern } from "@/lib/promo-engine";
+import { type LossRebateRule, matchesPromoFilter } from "@/lib/promo-engine";
 
 export default async function WeekDashboardPage({
   params,
@@ -64,7 +64,7 @@ export default async function WeekDashboardPage({
         if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
         if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
         if (b.stakeCashUnits <= 0) return false;
-        if (!matchesEventPattern(b.eventKey, b.description, rule.eventKeyPattern)) return false;
+        if (!matchesPromoFilter(b, rule)) return false;
         return true;
       });
 
@@ -211,6 +211,31 @@ export default async function WeekDashboardPage({
         weekStatus={week.status}
       />
 
+      {/* Suggest Promos Card (OPEN weeks only) */}
+      {week.status === "OPEN" && (
+        <Link
+          href={`/weeks/${id}/promos/new?suggest=true`}
+          className="block bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-xl p-4 hover:border-purple-500/40 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-purple-300 font-medium text-sm">Suggest Promos</p>
+                <p className="text-gray-500 text-xs">
+                  AI analyzes this week&apos;s sports schedule
+                </p>
+              </div>
+            </div>
+            <span className="text-purple-400 text-xs">&rarr;</span>
+          </div>
+        </Link>
+      )}
+
       {/* Active Promos */}
       {week.promos.length > 0 && (
         <div>
@@ -231,8 +256,8 @@ export default async function WeekDashboardPage({
                       <p className="text-white text-sm font-medium">{p.name}</p>
                       <p className="text-gray-500 text-xs">
                         {rule.percentBack}% back &middot; Min {rule.minHandleUnits} units &middot; Cap {rule.capUnits}
-                        {rule.eventKeyPattern && (
-                          <span className="text-purple-400"> &middot; {rule.eventKeyPattern}</span>
+                        {(rule.sport || rule.betType) && (
+                          <span className="text-purple-400"> &middot; {[rule.sport, rule.betType].filter(Boolean).join(" ")}</span>
                         )}
                       </p>
                     </div>

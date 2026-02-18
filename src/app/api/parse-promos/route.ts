@@ -40,8 +40,18 @@ The week runs from ${weekStart} to ${weekEnd}.
 
 Currently the only supported promo type is LOSS_REBATE — where members get a percentage of their losses back as free play if they meet a minimum betting handle.
 
+IMPORTANT: Promos usually target a SPECIFIC sport AND/OR a specific bet type. For example:
+- "50% golf outright loss rebate" → sport: "golf", betType: "outright"
+- "30% NFL moneyline rebate" → sport: "nfl", betType: "moneyline"
+- "25% PGA tournament matchup rebate" → sport: "golf", betType: "matchup"
+- "Golf 1st round leader 30% back" → sport: "golf", betType: "round-leader"
+- "NBA player props 40% loss rebate" → sport: "nba", betType: "prop"
+- "50% loss rebate on all bets" → sport: null, betType: null
+
+You MUST create SEPARATE promos for each distinct sport+betType combination mentioned. For example, "50% golf outright rebate and 30% golf matchup rebate" should produce TWO separate promos, not one.
+
 For each promo found, extract:
-- name: A short descriptive name (e.g. "50% Golf Loss Rebate", "NFL 30% Back")
+- name: A short descriptive name (e.g. "50% Golf Outright Loss Rebate", "NFL ML 30% Back")
 - type: Always "LOSS_REBATE" for now
 - ruleJson: An object with these fields:
   - windowStart: "${weekStart}" (ISO datetime, default to week start)
@@ -52,7 +62,8 @@ For each promo found, extract:
   - oddsMin: minimum American odds or null if no restriction
   - oddsMax: maximum American odds or null if no restriction
   - disqualifyBothSides: true if the promo mentions disqualifying members who bet both sides, false otherwise (default true)
-  - eventKeyPattern: If the promo applies only to a specific sport/event/category (e.g. "golf outrights", "NFL bets", "NBA", "tennis", "soccer"), extract a short lowercase keyword that can be used to match bet eventKeys and descriptions. Examples: "golf", "nfl", "nba", "tennis", "soccer", "mlb", "ufc", "pga". If the promo applies to ALL bets across all sports, use null.
+  - sport: The sport/league this promo applies to as a lowercase string, or null if it applies to all sports. Examples: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "mma", "boxing", "cricket", "f1", "nascar", "college-football", "college-basketball", "esports", "casino"
+  - betType: The specific bet type this promo applies to as a lowercase string, or null if it applies to all bet types within the sport. Examples: "outright" (tournament/futures winner), "matchup" (head-to-head), "round-leader" (1st/2nd/3rd round leader), "top-finish" (top 5/10/20), "spread" (point spread), "moneyline" (straight win/ML), "total" (over/under), "prop" (player/team prop), "futures" (season futures), "parlay", "live", "3-ball" (golf 3-ball matchup)
 
 If a promo doesn't clearly map to a loss rebate (e.g. "25 free play for 3+ bets"), still create it as LOSS_REBATE with your best interpretation:
 - For flat bonuses (e.g. "25 free play"), set percentBack to 100 and capUnits to the bonus amount
@@ -76,7 +87,8 @@ Respond ONLY with valid JSON:
         "oddsMin": number | null,
         "oddsMax": number | null,
         "disqualifyBothSides": boolean,
-        "eventKeyPattern": "string or null"
+        "sport": "string or null",
+        "betType": "string or null"
       }
     }
   ]

@@ -4,7 +4,7 @@ import { getCreditInfo } from "@/lib/credit";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MemberBets } from "./member-bets";
-import { type LossRebateRule, matchesEventPattern } from "@/lib/promo-engine";
+import { type LossRebateRule, matchesPromoFilter } from "@/lib/promo-engine";
 
 export default async function MemberDetailPage({
   params,
@@ -59,7 +59,7 @@ export default async function MemberDetailPage({
       if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
       if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
       if (b.stakeCashUnits <= 0) return false;
-      if (!matchesEventPattern(b.eventKey, b.description, rule.eventKeyPattern)) return false;
+      if (!matchesPromoFilter(b, rule)) return false;
       return true;
     });
 

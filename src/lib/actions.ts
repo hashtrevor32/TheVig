@@ -107,6 +107,20 @@ export async function removeMemberFromWeek(weekId: string, memberId: string) {
   revalidatePath(`/weeks/${weekId}`);
 }
 
+export async function deleteWeek(weekId: string) {
+  const week = await verifyWeekOwnership(weekId);
+
+  // Delete all related records in order (no cascade in schema)
+  await prisma.weekStatement.deleteMany({ where: { weekId } });
+  await prisma.freePlayAward.deleteMany({ where: { weekId } });
+  await prisma.promo.deleteMany({ where: { weekId } });
+  await prisma.bet.deleteMany({ where: { weekId } });
+  await prisma.weekMember.deleteMany({ where: { weekId } });
+  await prisma.week.delete({ where: { id: weekId } });
+
+  revalidatePath("/weeks");
+}
+
 // ── Bets ──
 
 export async function createBet(data: {
@@ -114,6 +128,8 @@ export async function createBet(data: {
   memberId: string;
   description: string;
   eventKey?: string;
+  sport?: string;
+  betType?: string;
   oddsAmerican: number;
   stakeCashUnits: number;
   stakeFreePlayUnits?: number;
@@ -159,6 +175,8 @@ export async function createBet(data: {
       memberId: data.memberId,
       description: data.description,
       eventKey: data.eventKey || null,
+      sport: data.sport || null,
+      betType: data.betType || null,
       oddsAmerican: data.oddsAmerican,
       stakeCashUnits: data.stakeCashUnits,
       stakeFreePlayUnits: fpStake,
@@ -244,6 +262,8 @@ export async function editBet(data: {
   betId: string;
   description?: string;
   eventKey?: string | null;
+  sport?: string | null;
+  betType?: string | null;
   oddsAmerican?: number;
   stakeCashUnits?: number;
   stakeFreePlayUnits?: number;
@@ -297,6 +317,8 @@ export async function editBet(data: {
     data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.eventKey !== undefined && { eventKey: data.eventKey }),
+      ...(data.sport !== undefined && { sport: data.sport }),
+      ...(data.betType !== undefined && { betType: data.betType }),
       ...(data.oddsAmerican !== undefined && { oddsAmerican: data.oddsAmerican }),
       ...(data.stakeCashUnits !== undefined && { stakeCashUnits: data.stakeCashUnits }),
       ...(data.stakeFreePlayUnits !== undefined && { stakeFreePlayUnits: data.stakeFreePlayUnits }),
@@ -361,6 +383,8 @@ export async function createBulkBets(data: {
   bets: {
     description: string;
     eventKey?: string;
+    sport?: string;
+    betType?: string;
     oddsAmerican: number;
     stakeCashUnits: number;
     stakeFreePlayUnits?: number;
@@ -417,6 +441,8 @@ export async function createBulkBets(data: {
           memberId: data.memberId,
           description: bet.description,
           eventKey: bet.eventKey || null,
+          sport: bet.sport || null,
+          betType: bet.betType || null,
           oddsAmerican: bet.oddsAmerican,
           stakeCashUnits: bet.stakeCashUnits,
           stakeFreePlayUnits: bet.stakeFreePlayUnits ?? 0,
