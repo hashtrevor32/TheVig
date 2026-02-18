@@ -21,6 +21,8 @@ type ParsedBet = {
   isFreePlay?: boolean;
   eventKey: string;
   placedAt: string | null;
+  settled?: "WIN" | "LOSS" | "PUSH" | null;
+  profitAmount?: number | null;
 };
 
 type ExistingBet = {
@@ -328,6 +330,33 @@ export function AddBetForm({
             betStake = b.stake > 0 ? Math.round(b.stake) : stake;
           }
 
+          // Calculate payout for pre-settled bets
+          let settled: "WIN" | "LOSS" | "PUSH" | undefined;
+          let payoutCashUnits: number | undefined;
+          if (b.settled) {
+            settled = b.settled;
+            const cashStake = betIsFP ? 0 : betStake;
+            const totalStake = betStake; // cash or FP — used for payout calc
+            if (b.settled === "LOSS") {
+              payoutCashUnits = 0;
+            } else if (b.settled === "PUSH") {
+              payoutCashUnits = cashStake;
+            } else if (b.settled === "WIN") {
+              // If AI gave us a profitAmount, use stake + profit as payout
+              if (b.profitAmount != null && b.profitAmount > 0) {
+                payoutCashUnits = cashStake + Math.round(b.profitAmount);
+              } else {
+                // Calculate from odds
+                const odds = Math.round(b.oddsAmerican);
+                if (odds > 0) {
+                  payoutCashUnits = totalStake + Math.round((totalStake * odds) / 100);
+                } else {
+                  payoutCashUnits = totalStake + Math.round((totalStake * 100) / Math.abs(odds));
+                }
+              }
+            }
+          }
+
           return {
             description: b.description,
             eventKey: b.eventKey || undefined,
@@ -335,11 +364,14 @@ export function AddBetForm({
             stakeCashUnits: betIsFP ? 0 : betStake,
             stakeFreePlayUnits: betIsFP ? betStake : 0,
             placedAt: b.placedAt || undefined,
+            ...(settled ? { settled, payoutCashUnits } : {}),
           };
         }),
       });
 
-      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!`);
+      const settledCount = parsedBets.filter(b => b.settled).length;
+      const settledMsg = settledCount > 0 ? ` (${settledCount} auto-settled)` : "";
+      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!${settledMsg}`);
       setParsedBets([]);
       setAllScannedBets([]);
       setDescription("");
@@ -600,6 +632,11 @@ export function AddBetForm({
           <div className="flex items-center justify-between">
             <p className="text-purple-400 text-xs font-medium">
               {parsedBets.length} bets detected
+              {parsedBets.filter(b => b.settled).length > 0 && (
+                <span className="text-green-400 ml-1">
+                  ({parsedBets.filter(b => b.settled).length} settled)
+                </span>
+              )}
             </p>
             {memberId && (
               <button
@@ -638,9 +675,21 @@ export function AddBetForm({
                 {b.isFreePlay && (
                   <span className="text-blue-400 mr-1">🎰 FP</span>
                 )}
+                {b.settled && (
+                  <span className={`mr-1 ${
+                    b.settled === "WIN" ? "text-green-400" : b.settled === "LOSS" ? "text-red-400" : "text-gray-400"
+                  }`}>
+                    {b.settled === "WIN" ? "✓" : b.settled === "LOSS" ? "✗" : "—"}
+                  </span>
+                )}
                 {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
                 {b.oddsAmerican})
                 {b.stake > 0 && ` · ${b.stake}${b.isFreePlay ? " to win" : " units"}`}
+                {b.settled && b.profitAmount != null && (
+                  <span className={`ml-1 font-medium ${b.profitAmount > 0 ? "text-green-400" : b.profitAmount < 0 ? "text-red-400" : "text-gray-400"}`}>
+                    {b.profitAmount > 0 ? "+" : ""}{b.profitAmount}
+                  </span>
+                )}
                 {b.placedAt && (
                   <span className="text-gray-600 ml-1">· {b.placedAt}</span>
                 )}
