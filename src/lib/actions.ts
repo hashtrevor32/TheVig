@@ -195,6 +195,124 @@ export async function quickSettle(
   revalidatePath(`/weeks/${bet.weekId}`);
 }
 
+// ── Edit / Void Bets ──
+
+export async function editBet(data: {
+  betId: string;
+  description?: string;
+  eventKey?: string | null;
+  oddsAmerican?: number;
+  stakeCashUnits?: number;
+  stakeFreePlayUnits?: number;
+}) {
+  const bet = await prisma.bet.findUnique({
+    where: { id: data.betId },
+    include: { week: true },
+  });
+  if (!bet) throw new Error("Bet not found");
+  const groupId = await getGroupId();
+  if (bet.week.groupId !== groupId) throw new Error("Bet not found");
+  if (bet.status !== "OPEN") throw new Error("Can only edit open bets");
+
+  if (data.stakeCashUnits !== undefined && data.stakeCashUnits !== bet.stakeCashUnits) {
+    const credit = await getCreditInfo(bet.weekId, bet.memberId);
+    const effectiveAvailable = credit.availableCredit + bet.stakeCashUnits;
+    if (data.stakeCashUnits > effectiveAvailable) {
+      throw new Error(
+        `New stake ${data.stakeCashUnits} exceeds available credit ${effectiveAvailable}`
+      );
+    }
+  }
+
+  await prisma.bet.update({
+    where: { id: data.betId },
+    data: {
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.eventKey !== undefined && { eventKey: data.eventKey }),
+      ...(data.oddsAmerican !== undefined && { oddsAmerican: data.oddsAmerican }),
+      ...(data.stakeCashUnits !== undefined && { stakeCashUnits: data.stakeCashUnits }),
+      ...(data.stakeFreePlayUnits !== undefined && { stakeFreePlayUnits: data.stakeFreePlayUnits }),
+    },
+  });
+  revalidatePath(`/weeks/${bet.weekId}`);
+}
+
+export async function voidBet(betId: string) {
+  const bet = await prisma.bet.findUnique({
+    where: { id: betId },
+    include: { week: true },
+  });
+  if (!bet) throw new Error("Bet not found");
+  const groupId = await getGroupId();
+  if (bet.week.groupId !== groupId) throw new Error("Bet not found");
+  if (bet.status !== "OPEN") throw new Error("Can only void open bets");
+
+  await prisma.bet.update({
+    where: { id: betId },
+    data: { status: "VOIDED" },
+  });
+  revalidatePath(`/weeks/${bet.weekId}`);
+}
+
+// ── Bulk Settle ──
+
+export async function bulkSettle(
+  settlements: { betId: string; result: "WIN" | "LOSS" | "PUSH"; payoutCashUnits: number }[]
+) {
+  if (settlements.length === 0) return;
+
+  const groupId = await getGroupId();
+  const betIds = settlements.map((s) => s.betId);
+  const bets = await prisma.bet.findMany({
+    where: { id: { in: betIds } },
+    include: { week: true },
+  });
+
+  if (bets.length !== settlements.length) throw new Error("Some bets not found");
+  for (const bet of bets) {
+    if (bet.week.groupId !== groupId) throw new Error("Unauthorized");
+    if (bet.status !== "OPEN") throw new Error(`Bet is not open`);
+  }
+
+  const now = new Date();
+  await prisma.$transaction(
+    settlements.map((s) =>
+      prisma.bet.update({
+        where: { id: s.betId },
+        data: {
+          status: "SETTLED",
+          result: s.result,
+          payoutCashUnits: s.payoutCashUnits,
+          settledAt: now,
+        },
+      })
+    )
+  );
+
+  const weekIds = [...new Set(bets.map((b) => b.weekId))];
+  for (const wid of weekIds) {
+    revalidatePath(`/weeks/${wid}`);
+  }
+}
+
+// ── Credit Limits ──
+
+export async function updateCreditLimit(
+  weekId: string,
+  memberId: string,
+  newLimit: number
+) {
+  const week = await verifyWeekOwnership(weekId);
+  if (week.status !== "OPEN") throw new Error("Can only edit credit limits on open weeks");
+  if (newLimit < 0) throw new Error("Credit limit cannot be negative");
+
+  await prisma.weekMember.update({
+    where: { weekId_memberId: { weekId, memberId } },
+    data: { creditLimitUnits: newLimit },
+  });
+  revalidatePath(`/weeks/${weekId}`);
+}
+
 // ── Free Play Awards ──
 
 export async function createFreePlayAward(data: {

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireWeekAccess, getGroupId } from "@/lib/auth";
 import Link from "next/link";
 import { WeekDashboardClient } from "./week-dashboard-client";
+import { MemberCards } from "./member-cards";
 import type { LossRebateRule } from "@/lib/promo-engine";
 
 export default async function WeekDashboardPage({
@@ -166,82 +167,11 @@ export default async function WeekDashboardPage({
       )}
 
       {/* Member Cards */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">
-          Members ({memberStats.length})
-        </h3>
-        <div className="space-y-3">
-          {memberStats.map((ms) => {
-            const pct =
-              ms.creditLimit > 0
-                ? (ms.openExposure / ms.creditLimit) * 100
-                : 0;
-            const barColor =
-              pct < 50
-                ? "bg-green-500"
-                : pct < 80
-                ? "bg-yellow-500"
-                : "bg-red-500";
-
-            return (
-              <div
-                key={ms.memberId}
-                className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white">
-                      {ms.memberName[0]}
-                    </div>
-                    <span className="text-white font-medium">
-                      {ms.memberName}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <p
-                      className={`text-sm font-semibold ${
-                        ms.cashPL > 0
-                          ? "text-green-400"
-                          : ms.cashPL < 0
-                          ? "text-red-400"
-                          : "text-gray-400"
-                      }`}
-                    >
-                      {ms.cashPL >= 0 ? "+" : ""}
-                      {ms.cashPL} units
-                    </p>
-                    {ms.freePlay > 0 && (
-                      <p className="text-xs text-blue-400">
-                        +{ms.freePlay} free play
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Credit Meter */}
-                <div>
-                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>
-                      {ms.openExposure} / {ms.creditLimit} used
-                    </span>
-                    <span>{ms.availableCredit} available</span>
-                  </div>
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${barColor} rounded-full transition-all`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 text-xs text-gray-500">
-                  <span>{ms.openBetsCount} open bets</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <MemberCards
+        memberStats={memberStats}
+        weekId={id}
+        weekStatus={week.status}
+      />
 
       {/* Active Promos */}
       {week.promos.length > 0 && (
