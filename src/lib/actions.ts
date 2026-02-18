@@ -424,17 +424,8 @@ export async function createBulkBets(data: {
     }
   }
 
-  if (totalFPStake > 0) {
-    const member = await prisma.member.findUnique({
-      where: { id: data.memberId },
-      select: { freePlayBalance: true },
-    });
-    if (!member || totalFPStake > member.freePlayBalance) {
-      throw new Error(
-        `Total FP stake ${totalFPStake} exceeds available FP balance ${member?.freePlayBalance ?? 0}`
-      );
-    }
-  }
+  // For FP bets from scans, don't block on insufficient balance — the bet was already placed.
+  // Just deduct what we can after creation.
 
   const now = new Date();
 
@@ -473,11 +464,20 @@ export async function createBulkBets(data: {
     })
   );
 
+  // Deduct FP balance — cap at available balance to prevent going negative
   if (totalFPStake > 0) {
-    await prisma.member.update({
+    const member = await prisma.member.findUnique({
       where: { id: data.memberId },
-      data: { freePlayBalance: { decrement: totalFPStake } },
+      select: { freePlayBalance: true },
     });
+    const currentBalance = member?.freePlayBalance ?? 0;
+    const deductAmount = Math.min(totalFPStake, currentBalance);
+    if (deductAmount > 0) {
+      await prisma.member.update({
+        where: { id: data.memberId },
+        data: { freePlayBalance: { decrement: deductAmount } },
+      });
+    }
   }
 
   revalidatePath(`/weeks/${data.weekId}`);

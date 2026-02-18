@@ -119,31 +119,46 @@ export function AddBetForm({
       .trim();
   }
 
+  function computeActualStake(bet: ParsedBet): number {
+    // For free play bets, the AI gives "to win" — back-calculate actual FP stake
+    if (bet.isFreePlay && bet.stake > 0) {
+      if (bet.oddsAmerican > 0) {
+        return Math.round((bet.stake * 100) / bet.oddsAmerican);
+      } else {
+        return Math.round((bet.stake * Math.abs(bet.oddsAmerican)) / 100);
+      }
+    }
+    return bet.stake;
+  }
+
   function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
+    const betActualStake = computeActualStake(bet);
+
     return memberExisting.some((existing) => {
       const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
-      const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
-      const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
+      const existingTotalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
+      const stakeMatch = betActualStake > 0 && existingTotalStake === betActualStake;
 
-      // Must at least have matching odds and stake to even consider
-      if (!oddsMatch || !stakeMatch) return false;
+      // Must at least have matching odds to even consider
+      if (!oddsMatch) return false;
 
-      // If both have timestamps, only the timestamp decides.
-      // Different second = different bet (intentional re-bet). Same second = duplicate.
+      // If both have timestamps, the timestamp is the key.
+      // Same second = duplicate. Different second = different bet.
       if (bet.placedAt && existing.placedAt) {
         try {
           const scannedTime = new Date(bet.placedAt).getTime();
           const existingTime = new Date(existing.placedAt).getTime();
           if (!isNaN(scannedTime) && !isNaN(existingTime)) {
-            // Same timestamp (within 2s to handle rounding) = duplicate
             return Math.abs(scannedTime - existingTime) < 2_000;
           }
         } catch {
-          // timestamp parse failed — fall through to description check
+          // timestamp parse failed — fall through
         }
       }
 
-      // No timestamp available — fall back to description match
+      // No usable timestamp — use odds + stake + description
+      if (!stakeMatch) return false;
+
       const betDescNorm = normalizeDesc(bet.description);
       const existDescNorm = normalizeDesc(existing.description);
 
@@ -348,10 +363,11 @@ export function AddBetForm({
         memberId,
         overrideCredit: true, // scanned/pasted bets bypass credit since they're already placed
         bets: parsedBets.map((b) => {
-          const betIsFP = b.isFreePlay || isFreePlay;
+          // Only treat as FP if the AI specifically detected it on this bet
+          const betIsFP = !!b.isFreePlay;
           let betStake: number;
 
-          if (betIsFP && b.isFreePlay) {
+          if (betIsFP) {
             // AI detected free play — back-calculate FP stake from "to win" amount
             const toWin = b.stake;
             if (b.oddsAmerican > 0) {
@@ -369,24 +385,28 @@ export function AddBetForm({
           let payoutCashUnits: number | undefined;
           if (b.settled) {
             settled = b.settled;
-            const cashStake = betIsFP ? 0 : betStake;
-            const totalStake = betStake; // cash or FP — used for payout calc
             if (b.settled === "LOSS") {
               payoutCashUnits = 0;
             } else if (b.settled === "PUSH") {
-              payoutCashUnits = cashStake;
+              // Push: cash bets get stake back, FP bets get nothing back
+              payoutCashUnits = betIsFP ? 0 : betStake;
             } else if (b.settled === "WIN") {
-              // If AI gave us a profitAmount, use stake + profit as payout
               if (b.profitAmount != null && b.profitAmount > 0) {
-                payoutCashUnits = cashStake + Math.round(b.profitAmount);
+                // AI gave us the profit — for cash bets: stake + profit, for FP: just profit
+                payoutCashUnits = betIsFP
+                  ? Math.round(b.profitAmount)
+                  : betStake + Math.round(b.profitAmount);
               } else {
-                // Calculate from odds
+                // Calculate winnings from odds
                 const odds = Math.round(b.oddsAmerican);
+                let winnings: number;
                 if (odds > 0) {
-                  payoutCashUnits = totalStake + Math.round((totalStake * odds) / 100);
+                  winnings = Math.round((betStake * odds) / 100);
                 } else {
-                  payoutCashUnits = totalStake + Math.round((totalStake * 100) / Math.abs(odds));
+                  winnings = Math.round((betStake * 100) / Math.abs(odds));
                 }
+                // Cash bet: stake + winnings. FP bet: just winnings (stake not returned).
+                payoutCashUnits = betIsFP ? winnings : betStake + winnings;
               }
             }
           }
@@ -407,16 +427,8 @@ export function AddBetForm({
 
       // Track added bets locally for duplicate detection on subsequent scans
       const addedForMember: ExistingBet[] = parsedBets.map((b) => {
-        const betIsFP = b.isFreePlay || isFreePlay;
-        let betStake: number;
-        if (betIsFP && b.isFreePlay) {
-          const toWin = b.stake;
-          if (b.oddsAmerican > 0) betStake = Math.round((toWin * 100) / b.oddsAmerican);
-          else betStake = Math.round((toWin * Math.abs(b.oddsAmerican)) / 100);
-          if (betStake <= 0) betStake = Math.round(toWin);
-        } else {
-          betStake = b.stake > 0 ? Math.round(b.stake) : stake;
-        }
+        const betIsFP = !!b.isFreePlay;
+        const betStake = computeActualStake(b) || (b.stake > 0 ? Math.round(b.stake) : 0);
         return {
           description: b.description,
           oddsAmerican: Math.round(b.oddsAmerican),
