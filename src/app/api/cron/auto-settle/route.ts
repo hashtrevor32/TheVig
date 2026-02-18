@@ -106,7 +106,7 @@ async function fetchScores(dateStr: string): Promise<ESPNEvent[]> {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
-      if (data.events) {
+      if (data.events && Array.isArray(data.events)) {
         allEvents.push(...data.events);
       }
     } catch {
@@ -118,19 +118,25 @@ async function fetchScores(dateStr: string): Promise<ESPNEvent[]> {
 }
 
 function formatScoresForAI(events: ESPNEvent[]): string {
-  const completed = events.filter((e) => e.status.type.completed);
+  const completed = events.filter(
+    (e) => e.status?.type?.completed
+  );
   if (completed.length === 0) return "No completed games found.";
 
   return completed
     .map((e) => {
-      const comp = e.competitions[0];
-      if (!comp) return null;
-      const home = comp.competitors.find((c) => c.homeAway === "home");
-      const away = comp.competitors.find((c) => c.homeAway === "away");
-      if (!home || !away) return null;
+      try {
+        const comp = e.competitions?.[0];
+        if (!comp?.competitors) return null;
+        const home = comp.competitors.find((c) => c.homeAway === "home");
+        const away = comp.competitors.find((c) => c.homeAway === "away");
+        if (!home?.team || !away?.team) return null;
 
-      const winner = comp.competitors.find((c) => c.winner);
-      return `${away.team.displayName} (${away.team.abbreviation}) ${away.score} @ ${home.team.displayName} (${home.team.abbreviation}) ${home.score} — Winner: ${winner ? winner.team.displayName : "TBD/Draw"}`;
+        const winner = comp.competitors.find((c) => c.winner);
+        return `${away.team.displayName} (${away.team.abbreviation}) ${away.score} @ ${home.team.displayName} (${home.team.abbreviation}) ${home.score} — Winner: ${winner ? winner.team.displayName : "TBD/Draw"}`;
+      } catch {
+        return null;
+      }
     })
     .filter(Boolean)
     .join("\n");
