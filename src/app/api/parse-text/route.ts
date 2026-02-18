@@ -41,6 +41,8 @@ For each bet, provide:
 - oddsAmerican: The American odds as a number. If decimal odds are shown, convert to American. For casino bets without clear odds, use -110 as default.
 - stake: The wager/stake amount as a number (units, not dollars). This is the actual amount wagered. If not visible, use 0.
 - isFreePlay: If the wager amount shown is $0.00 or "Free Bet" or "Free Play" or "Bonus Bet", set this to true. A $0 wager means it was placed using free play credits — in that case, look for the "To Win" or potential payout amount and use that as the stake instead. Otherwise false.
+
+IMPORTANT: If you see "Agent Payment" as the payment or funding source for a bet, SKIP that bet entirely — do NOT include it in the output. Agent Payment bets are free play credits given by the operator and should not be tracked as new bets.
 - eventKey: A short identifier for the game/event (e.g. "chiefs-bills-feb17", "casino-blackjack"). Use lowercase with hyphens.
 - placedAt: The exact date/time the bet was placed if visible (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
