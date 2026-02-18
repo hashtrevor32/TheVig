@@ -560,7 +560,7 @@ function OpenBetCard({
   const [settling, setSettling] = useState(false);
   const router = useRouter();
 
-  async function handleQuickSettle(result: "LOSS" | "PUSH") {
+  async function handleQuickSettle(result: "LOSS" | "PUSH" | "WIN") {
     setSettling(true);
     await quickSettle(bet.id, result);
     router.refresh();
@@ -639,12 +639,13 @@ function OpenBetCard({
           >
             Push
           </button>
-          <Link
-            href={`/weeks/${weekId}/bets/${bet.id}/settle`}
-            className="flex-1 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded text-center transition-colors"
+          <button
+            onClick={() => handleQuickSettle("WIN")}
+            disabled={settling}
+            className="flex-1 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium rounded transition-colors"
           >
             Win
-          </Link>
+          </button>
           <Link
             href={`/weeks/${weekId}/bets/${bet.id}/edit`}
             className="py-1.5 px-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-medium rounded transition-colors"

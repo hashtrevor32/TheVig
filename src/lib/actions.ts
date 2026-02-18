@@ -203,7 +203,7 @@ export async function settleBet(data: {
 
 export async function quickSettle(
   betId: string,
-  result: "LOSS" | "PUSH"
+  result: "LOSS" | "PUSH" | "WIN"
 ) {
   const bet = await prisma.bet.findUnique({
     where: { id: betId },
@@ -213,7 +213,18 @@ export async function quickSettle(
   const groupId = await getGroupId();
   if (bet.week.groupId !== groupId) throw new Error("Bet not found");
 
-  const payoutCashUnits = result === "LOSS" ? 0 : bet.stakeCashUnits;
+  let payoutCashUnits = 0;
+  if (result === "PUSH") {
+    payoutCashUnits = bet.stakeCashUnits;
+  } else if (result === "WIN") {
+    // Auto-calculate payout from American odds
+    const stake = bet.stakeCashUnits + bet.stakeFreePlayUnits;
+    if (bet.oddsAmerican > 0) {
+      payoutCashUnits = stake + Math.round((stake * bet.oddsAmerican) / 100);
+    } else {
+      payoutCashUnits = stake + Math.round((stake * 100) / Math.abs(bet.oddsAmerican));
+    }
+  }
 
   await prisma.bet.update({
     where: { id: betId },

@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
 For each bet, provide:
 - description: The bet description (e.g. "Chiefs -3.5", "Lakers ML", "Over 45.5", "Blackjack Hand #123", "Roulette - Red")
 - oddsAmerican: The American odds as a number. If decimal odds are shown, convert to American. For casino bets without clear odds, use -110 as default.
-- stake: The wager/stake amount as a number (units, not dollars). If not visible, use 0.
+- stake: The wager/stake amount as a number (units, not dollars). This is the actual amount wagered. If not visible, use 0.
+- isFreePlay: If the wager amount shown is $0.00 or "Free Bet" or "Free Play" or "Bonus Bet", set this to true. A $0 wager means it was placed using free play credits — in that case, look for the "To Win" or potential payout amount and use that as the stake instead. Otherwise false.
 - eventKey: A short identifier for the game/event (e.g. "chiefs-bills-feb17", "casino-blackjack"). Use lowercase with hyphens.
 - placedAt: The exact date/time the bet was placed if visible (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
@@ -52,6 +53,7 @@ Respond ONLY with valid JSON in this exact format, no other text:
       "description": "string",
       "oddsAmerican": number,
       "stake": number,
+      "isFreePlay": boolean,
       "eventKey": "string",
       "placedAt": "string or null"
     }

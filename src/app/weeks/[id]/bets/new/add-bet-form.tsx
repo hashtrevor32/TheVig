@@ -18,6 +18,7 @@ type ParsedBet = {
   description: string;
   oddsAmerican: number;
   stake: number;
+  isFreePlay?: boolean;
   eventKey: string;
   placedAt: string | null;
 };
@@ -249,9 +250,26 @@ export function AddBetForm({
   function fillBet(bet: ParsedBet) {
     setDescription(bet.description);
     setOddsAmerican(String(bet.oddsAmerican));
-    if (bet.stake > 0) setStakeCashUnits(String(bet.stake));
     if (bet.eventKey) setEventKey(bet.eventKey);
     setPlacedAt(bet.placedAt || null);
+
+    if (bet.isFreePlay) {
+      setIsFreePlay(true);
+      // AI gives us the "to win" amount — back-calculate the FP stake from odds
+      const toWin = bet.stake;
+      let fpStake = 0;
+      if (bet.oddsAmerican > 0) {
+        // +odds: toWin = stake * odds / 100  =>  stake = toWin * 100 / odds
+        fpStake = Math.round((toWin * 100) / bet.oddsAmerican);
+      } else {
+        // -odds: toWin = stake * 100 / |odds|  =>  stake = toWin * |odds| / 100
+        fpStake = Math.round((toWin * Math.abs(bet.oddsAmerican)) / 100);
+      }
+      setStakeCashUnits(String(fpStake > 0 ? fpStake : toWin));
+    } else {
+      setIsFreePlay(false);
+      if (bet.stake > 0) setStakeCashUnits(String(bet.stake));
+    }
   }
 
   function handleMemberChange(newMemberId: string) {
@@ -292,15 +310,30 @@ export function AddBetForm({
       const result = await createBulkBets({
         weekId,
         memberId,
-        overrideCredit: isFreePlay || overrideCredit,
+        overrideCredit: true, // scanned/pasted bets bypass credit since they're already placed
         bets: parsedBets.map((b) => {
-          const betStake = b.stake > 0 ? Math.round(b.stake) : stake;
+          const betIsFP = b.isFreePlay || isFreePlay;
+          let betStake: number;
+
+          if (betIsFP && b.isFreePlay) {
+            // AI detected free play — back-calculate FP stake from "to win" amount
+            const toWin = b.stake;
+            if (b.oddsAmerican > 0) {
+              betStake = Math.round((toWin * 100) / b.oddsAmerican);
+            } else {
+              betStake = Math.round((toWin * Math.abs(b.oddsAmerican)) / 100);
+            }
+            if (betStake <= 0) betStake = Math.round(toWin);
+          } else {
+            betStake = b.stake > 0 ? Math.round(b.stake) : stake;
+          }
+
           return {
             description: b.description,
             eventKey: b.eventKey || undefined,
             oddsAmerican: Math.round(b.oddsAmerican),
-            stakeCashUnits: isFreePlay ? 0 : betStake,
-            stakeFreePlayUnits: isFreePlay ? betStake : 0,
+            stakeCashUnits: betIsFP ? 0 : betStake,
+            stakeFreePlayUnits: betIsFP ? betStake : 0,
             placedAt: b.placedAt || undefined,
           };
         }),
@@ -602,9 +635,12 @@ export function AddBetForm({
                     : "text-gray-400 hover:bg-gray-800"
                 }`}
               >
+                {b.isFreePlay && (
+                  <span className="text-blue-400 mr-1">🎰 FP</span>
+                )}
                 {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
                 {b.oddsAmerican})
-                {b.stake > 0 && ` · ${b.stake} units`}
+                {b.stake > 0 && ` · ${b.stake}${b.isFreePlay ? " to win" : " units"}`}
                 {b.placedAt && (
                   <span className="text-gray-600 ml-1">· {b.placedAt}</span>
                 )}
