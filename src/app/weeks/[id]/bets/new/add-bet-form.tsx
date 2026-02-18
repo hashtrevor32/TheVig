@@ -120,55 +120,40 @@ export function AddBetForm({
   }
 
   function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
-    const betDescNorm = normalizeDesc(bet.description);
-
     return memberExisting.some((existing) => {
-      const existDescNorm = normalizeDesc(existing.description);
-
-      // Exact normalized description match
-      const descExact = existDescNorm === betDescNorm;
-
-      // Fuzzy: one description contains the other
-      // Handles "Chiefs -3.5" vs "Kansas City Chiefs -3.5 vs Bills"
-      const descFuzzy =
-        betDescNorm.length >= 6 &&
-        existDescNorm.length >= 6 &&
-        (existDescNorm.includes(betDescNorm) || betDescNorm.includes(existDescNorm));
-
       const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
       const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
       const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
 
-      // If description and odds don't match, it's definitely not a duplicate
-      if (!(descExact || descFuzzy) || !oddsMatch) return false;
+      // Must at least have matching odds and stake to even consider
+      if (!oddsMatch || !stakeMatch) return false;
 
-      // TIER 1: Both have timestamps — check if close enough
+      // If both have timestamps, only the timestamp decides.
+      // Different second = different bet (intentional re-bet). Same second = duplicate.
       if (bet.placedAt && existing.placedAt) {
         try {
           const scannedTime = new Date(bet.placedAt).getTime();
           const existingTime = new Date(existing.placedAt).getTime();
           if (!isNaN(scannedTime) && !isNaN(existingTime)) {
-            const diffMs = Math.abs(scannedTime - existingTime);
-            // Within 60 seconds = definitely the same bet
-            if (diffMs < 60_000) return true;
-            // Within 5 minutes AND same stake = likely same bet
-            // (timestamps can vary slightly between screenshots/parsing)
-            if (diffMs < 300_000 && stakeMatch) return true;
+            // Same timestamp (within 2s to handle rounding) = duplicate
+            return Math.abs(scannedTime - existingTime) < 2_000;
           }
         } catch {
-          // fall through to stake check
+          // timestamp parse failed — fall through to description check
         }
       }
 
-      // TIER 2: No timestamp on scanned bet, or timestamp parse failed
-      // Fall back to description + odds + stake match
-      if (!bet.placedAt && stakeMatch) return true;
+      // No timestamp available — fall back to description match
+      const betDescNorm = normalizeDesc(bet.description);
+      const existDescNorm = normalizeDesc(existing.description);
 
-      // TIER 3: Description + odds match AND stake matches — likely duplicate
-      // regardless of timestamp differences (covers re-scanning same slip)
-      if (stakeMatch) return true;
+      const descExact = existDescNorm === betDescNorm;
+      const descFuzzy =
+        betDescNorm.length >= 6 &&
+        existDescNorm.length >= 6 &&
+        (existDescNorm.includes(betDescNorm) || betDescNorm.includes(existDescNorm));
 
-      return false;
+      return descExact || descFuzzy;
     });
   }
 
