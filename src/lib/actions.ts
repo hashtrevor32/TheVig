@@ -118,6 +118,7 @@ export async function createBet(data: {
   stakeCashUnits: number;
   stakeFreePlayUnits?: number;
   overrideCredit?: boolean;
+  placedAt?: string;
 }) {
   await verifyWeekOwnership(data.weekId);
 
@@ -154,6 +155,7 @@ export async function createBet(data: {
       oddsAmerican: data.oddsAmerican,
       stakeCashUnits: data.stakeCashUnits,
       stakeFreePlayUnits: fpStake,
+      ...(data.placedAt ? { placedAt: new Date(data.placedAt) } : {}),
     },
   });
 

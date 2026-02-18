@@ -43,7 +43,13 @@ export default async function AddBetPage({
   });
 
   // Build existing bets per member for duplicate detection on scan
-  const existingBetsByMember: Record<string, { description: string; oddsAmerican: number }[]> = {};
+  const existingBetsByMember: Record<string, {
+    description: string;
+    oddsAmerican: number;
+    stakeCashUnits: number;
+    stakeFreePlayUnits: number;
+    placedAt: string;
+  }[]> = {};
   for (const bet of nonVoidedBets) {
     if (!existingBetsByMember[bet.memberId]) {
       existingBetsByMember[bet.memberId] = [];
@@ -51,6 +57,9 @@ export default async function AddBetPage({
     existingBetsByMember[bet.memberId].push({
       description: bet.description,
       oddsAmerican: bet.oddsAmerican,
+      stakeCashUnits: bet.stakeCashUnits,
+      stakeFreePlayUnits: bet.stakeFreePlayUnits,
+      placedAt: bet.placedAt.toISOString(),
     });
   }
 

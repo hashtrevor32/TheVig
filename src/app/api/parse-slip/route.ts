@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
 - oddsAmerican: The American odds as a number (e.g. -110, +150). If decimal or fractional odds are shown, convert to American.
 - stake: The wager/stake amount as a number (units, not dollars). If not visible, use 0.
 - eventKey: A short identifier for the game/event (e.g. "chiefs-bills-feb17"). Use lowercase with hyphens.
+- placedAt: The exact date/time the bet was placed if visible on the slip (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
 If this is a parlay/multi-leg bet, extract it as a single bet with the combined description listing all legs.
 
@@ -60,7 +61,8 @@ Respond ONLY with valid JSON in this exact format, no other text:
       "description": "string",
       "oddsAmerican": number,
       "stake": number,
-      "eventKey": "string"
+      "eventKey": "string",
+      "placedAt": "string or null"
     }
   ]
 }

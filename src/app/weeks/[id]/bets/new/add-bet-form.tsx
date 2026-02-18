@@ -19,9 +19,16 @@ type ParsedBet = {
   oddsAmerican: number;
   stake: number;
   eventKey: string;
+  placedAt: string | null;
 };
 
-type ExistingBet = { description: string; oddsAmerican: number };
+type ExistingBet = {
+  description: string;
+  oddsAmerican: number;
+  stakeCashUnits: number;
+  stakeFreePlayUnits: number;
+  placedAt: string;
+};
 
 export function AddBetForm({
   weekId,
@@ -37,6 +44,7 @@ export function AddBetForm({
   const [eventKey, setEventKey] = useState("");
   const [oddsAmerican, setOddsAmerican] = useState("");
   const [stakeCashUnits, setStakeCashUnits] = useState("");
+  const [placedAt, setPlacedAt] = useState<string | null>(null);
   const [isFreePlay, setIsFreePlay] = useState(false);
   const [overrideCredit, setOverrideCredit] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -85,11 +93,28 @@ export function AddBetForm({
   }
 
   function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
-    return memberExisting.some(
-      (existing) =>
-        existing.oddsAmerican === bet.oddsAmerican &&
-        existing.description.toLowerCase().trim() === bet.description.toLowerCase().trim()
-    );
+    return memberExisting.some((existing) => {
+      const descMatch =
+        existing.description.toLowerCase().trim() === bet.description.toLowerCase().trim();
+      const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
+      const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
+      const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
+
+      // If the scanned bet has a placedAt timestamp, compare to the second
+      if (bet.placedAt && descMatch && oddsMatch) {
+        try {
+          const scannedTime = new Date(bet.placedAt).getTime();
+          const existingTime = new Date(existing.placedAt).getTime();
+          // Match if within 60 seconds (timestamps may differ slightly)
+          if (Math.abs(scannedTime - existingTime) < 60_000) return true;
+        } catch {
+          // If date parsing fails, fall through to basic matching
+        }
+      }
+
+      // Fallback: match on description + odds + stake
+      return descMatch && oddsMatch && stakeMatch;
+    });
   }
 
   async function handleScan(file: File) {
@@ -161,6 +186,7 @@ export function AddBetForm({
     setOddsAmerican(String(bet.oddsAmerican));
     if (bet.stake > 0) setStakeCashUnits(String(bet.stake));
     if (bet.eventKey) setEventKey(bet.eventKey);
+    setPlacedAt(bet.placedAt || null);
   }
 
   function handleMemberChange(newMemberId: string) {
@@ -213,6 +239,7 @@ export function AddBetForm({
         stakeCashUnits: isFreePlay ? 0 : stake,
         stakeFreePlayUnits: isFreePlay ? stake : 0,
         overrideCredit: isFreePlay || overrideCredit,
+        placedAt: placedAt || undefined,
       });
 
       // If there are more parsed bets queued, fill the next one
@@ -399,6 +426,7 @@ export function AddBetForm({
                 {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
                 {b.oddsAmerican})
                 {b.stake > 0 && ` · ${b.stake} units`}
+                {b.placedAt && ` · ${b.placedAt}`}
               </p>
             ))}
           </div>

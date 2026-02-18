@@ -4,6 +4,14 @@ import { useState } from "react";
 import { quickSettle, bulkSettle } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Loader2, Zap, Check, X, SkipForward } from "lucide-react";
+
+type AutoSettleSuggestion = {
+  betId: string;
+  result: "WIN" | "LOSS" | "PUSH" | "SKIP";
+  reason: string;
+  matchedGame: string | null;
+};
 
 type Bet = {
   id: string;
@@ -39,6 +47,13 @@ export function BetsList({
   const [bulkWin, setBulkWin] = useState(false);
   const [winPayouts, setWinPayouts] = useState<Record<string, string>>({});
   const [settling, setSettling] = useState(false);
+  const [autoSettling, setAutoSettling] = useState(false);
+  const [autoSuggestions, setAutoSuggestions] = useState<AutoSettleSuggestion[]>([]);
+  const [autoError, setAutoError] = useState("");
+  const [gamesChecked, setGamesChecked] = useState(0);
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [applyingAuto, setApplyingAuto] = useState(false);
   const router = useRouter();
 
   const openBets = bets.filter((b) => b.status === "OPEN");
@@ -102,6 +117,117 @@ export function BetsList({
     setBulkWin(true);
   }
 
+  async function handleAutoSettle() {
+    setAutoSettling(true);
+    setAutoError("");
+    setAutoSuggestions([]);
+    setAcceptedIds(new Set());
+    setDismissedIds(new Set());
+
+    try {
+      const res = await fetch("/api/auto-settle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bets: openBets.map((b) => ({
+            id: b.id,
+            description: b.description,
+            oddsAmerican: b.oddsAmerican,
+            stakeCashUnits: b.stakeCashUnits,
+            eventKey: b.eventKey,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to auto-settle");
+
+      setAutoSuggestions(data.suggestions || []);
+      setGamesChecked(data.gamesChecked || 0);
+
+      if (data.message) setAutoError(data.message);
+    } catch (err) {
+      setAutoError(
+        err instanceof Error ? err.message : "Failed to fetch scores"
+      );
+    } finally {
+      setAutoSettling(false);
+    }
+  }
+
+  function toggleAccept(betId: string) {
+    setAcceptedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(betId)) next.delete(betId);
+      else next.add(betId);
+      return next;
+    });
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(betId);
+      return next;
+    });
+  }
+
+  function dismissSuggestion(betId: string) {
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(betId);
+      return next;
+    });
+    setAcceptedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(betId);
+      return next;
+    });
+  }
+
+  function acceptAll() {
+    const actionable = autoSuggestions.filter(
+      (s) => s.result !== "SKIP" && !dismissedIds.has(s.betId)
+    );
+    setAcceptedIds(new Set(actionable.map((s) => s.betId)));
+  }
+
+  async function applyAccepted() {
+    setApplyingAuto(true);
+    const settlements = autoSuggestions
+      .filter((s) => acceptedIds.has(s.betId) && s.result !== "SKIP")
+      .map((s) => {
+        const bet = openBets.find((b) => b.id === s.betId)!;
+        let payoutCashUnits = 0;
+        if (s.result === "WIN") {
+          payoutCashUnits = calculateDefaultPayout(
+            bet.stakeCashUnits,
+            bet.oddsAmerican
+          );
+        } else if (s.result === "PUSH") {
+          payoutCashUnits = bet.stakeCashUnits;
+        }
+        return {
+          betId: s.betId,
+          result: s.result as "WIN" | "LOSS" | "PUSH",
+          payoutCashUnits,
+        };
+      });
+
+    if (settlements.length > 0) {
+      await bulkSettle(settlements);
+    }
+    setAutoSuggestions([]);
+    setAcceptedIds(new Set());
+    setDismissedIds(new Set());
+    setApplyingAuto(false);
+    router.refresh();
+  }
+
+  function clearAutoSettle() {
+    setAutoSuggestions([]);
+    setAcceptedIds(new Set());
+    setDismissedIds(new Set());
+    setAutoError("");
+  }
+
   return (
     <div className="space-y-6">
       {openBets.length > 0 && (
@@ -110,13 +236,31 @@ export function BetsList({
             <h3 className="text-sm font-medium text-yellow-400 uppercase tracking-wide">
               Open ({openBets.length})
             </h3>
-            {weekStatus === "OPEN" && openBets.length > 1 && (
-              <button
-                onClick={() => bulkMode ? exitBulkMode() : setBulkMode(true)}
-                className="text-xs text-blue-400 hover:text-blue-300"
-              >
-                {bulkMode ? "Cancel" : "Bulk Settle"}
-              </button>
+            {weekStatus === "OPEN" && (
+              <div className="flex items-center gap-3">
+                {openBets.length > 0 && (
+                  <button
+                    onClick={handleAutoSettle}
+                    disabled={autoSettling}
+                    className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 disabled:text-gray-500"
+                  >
+                    {autoSettling ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Zap size={12} />
+                    )}
+                    {autoSettling ? "Checking..." : "Auto Settle"}
+                  </button>
+                )}
+                {openBets.length > 1 && (
+                  <button
+                    onClick={() => bulkMode ? exitBulkMode() : setBulkMode(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    {bulkMode ? "Cancel" : "Bulk Settle"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -150,6 +294,147 @@ export function BetsList({
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Auto Settle Suggestions */}
+      {autoError && autoSuggestions.length === 0 && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+          <p className="text-red-400 text-sm">{autoError}</p>
+        </div>
+      )}
+
+      {autoSuggestions.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-purple-400 uppercase tracking-wide">
+              Auto Settle Suggestions
+            </h3>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">
+                {gamesChecked} games checked
+              </span>
+              <button
+                onClick={clearAutoSettle}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 mb-3">
+            {autoSuggestions
+              .filter((s) => !dismissedIds.has(s.betId))
+              .map((s) => {
+                const bet = openBets.find((b) => b.id === s.betId);
+                if (!bet) return null;
+                const isAccepted = acceptedIds.has(s.betId);
+                const isSkip = s.result === "SKIP";
+
+                return (
+                  <div
+                    key={s.betId}
+                    className={`bg-gray-900 rounded-lg border p-3 ${
+                      isAccepted
+                        ? "border-green-500/50"
+                        : isSkip
+                        ? "border-gray-800 opacity-60"
+                        : "border-gray-800"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">
+                          {bet.description}
+                        </p>
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          {bet.member.name} · {bet.stakeCashUnits}u · {bet.oddsAmerican > 0 ? "+" : ""}{bet.oddsAmerican}
+                        </p>
+                        {s.matchedGame && (
+                          <p className="text-gray-400 text-xs mt-1">
+                            🏟 {s.matchedGame}
+                          </p>
+                        )}
+                        <p className="text-gray-500 text-xs mt-0.5 italic">
+                          {s.reason}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-bold ${
+                            s.result === "WIN"
+                              ? "bg-green-500/10 text-green-400"
+                              : s.result === "LOSS"
+                              ? "bg-red-500/10 text-red-400"
+                              : s.result === "PUSH"
+                              ? "bg-gray-700 text-gray-300"
+                              : "bg-gray-800 text-gray-500"
+                          }`}
+                        >
+                          {s.result}
+                        </span>
+                        {!isSkip && (
+                          <>
+                            <button
+                              onClick={() => toggleAccept(s.betId)}
+                              className={`p-1 rounded transition-colors ${
+                                isAccepted
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-gray-800 text-gray-500 hover:text-green-400"
+                              }`}
+                              title="Accept"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              onClick={() => dismissSuggestion(s.betId)}
+                              className="p-1 rounded bg-gray-800 text-gray-500 hover:text-red-400 transition-colors"
+                              title="Dismiss"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        )}
+                        {isSkip && (
+                          <span className="p-1 text-gray-600">
+                            <SkipForward size={14} />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Action bar for accepted suggestions */}
+          {autoSuggestions.filter((s) => s.result !== "SKIP" && !dismissedIds.has(s.betId)).length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={acceptAll}
+                className="text-xs text-purple-400 hover:text-purple-300"
+              >
+                Accept All
+              </button>
+              {acceptedIds.size > 0 && (
+                <button
+                  onClick={applyAccepted}
+                  disabled={applyingAuto}
+                  className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {applyingAuto ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Zap size={14} />
+                  )}
+                  {applyingAuto
+                    ? "Settling..."
+                    : `Apply ${acceptedIds.size} Settlement${acceptedIds.size > 1 ? "s" : ""}`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
