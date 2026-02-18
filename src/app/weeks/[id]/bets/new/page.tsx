@@ -59,7 +59,7 @@ export default async function AddBetPage({
       oddsAmerican: bet.oddsAmerican,
       stakeCashUnits: bet.stakeCashUnits,
       stakeFreePlayUnits: bet.stakeFreePlayUnits,
-      placedAt: bet.placedAt.toISOString(),
+      placedAt: bet.placedAt ? bet.placedAt.toISOString() : "",
     });
   }
 
