@@ -104,28 +104,60 @@ export function AddBetForm({
     });
   }
 
-  function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
-    return memberExisting.some((existing) => {
-      const descMatch =
-        existing.description.toLowerCase().trim() === bet.description.toLowerCase().trim();
-      const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
-      const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
-      const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
+  function normalizeDesc(s: string): string {
+    return s
+      .toLowerCase()
+      .replace(/[^a-z0-9.+\-]/g, " ") // strip punctuation except .+-
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
-      // If the scanned bet has a placedAt timestamp, compare to the second
-      if (bet.placedAt && descMatch && oddsMatch) {
+  function isDuplicate(bet: ParsedBet, memberExisting: ExistingBet[]): boolean {
+    const betDescNorm = normalizeDesc(bet.description);
+
+    return memberExisting.some((existing) => {
+      const existDescNorm = normalizeDesc(existing.description);
+
+      // Exact normalized description match
+      const descExact = existDescNorm === betDescNorm;
+
+      // Fuzzy: one description contains the other
+      // Handles "Chiefs -3.5" vs "Kansas City Chiefs -3.5 vs Bills"
+      const descFuzzy =
+        betDescNorm.length >= 6 &&
+        existDescNorm.length >= 6 &&
+        (existDescNorm.includes(betDescNorm) || betDescNorm.includes(existDescNorm));
+
+      const oddsMatch = existing.oddsAmerican === bet.oddsAmerican;
+
+      // PRIMARY: timestamp is the key identifier.
+      // A member CAN legitimately place the same bet twice seconds apart.
+      // Only flag as duplicate if the placed timestamps match within 60 seconds.
+      if (bet.placedAt && existing.placedAt && (descExact || descFuzzy) && oddsMatch) {
         try {
           const scannedTime = new Date(bet.placedAt).getTime();
           const existingTime = new Date(existing.placedAt).getTime();
-          // Match if within 60 seconds (timestamps may differ slightly)
-          if (Math.abs(scannedTime - existingTime) < 60_000) return true;
+          // Same bet = same timestamp (within 60s to account for AI parsing variance)
+          if (!isNaN(scannedTime) && !isNaN(existingTime) && Math.abs(scannedTime - existingTime) < 60_000) {
+            return true;
+          }
         } catch {
-          // If date parsing fails, fall through to basic matching
+          // fall through
         }
+        // If both have timestamps but they differ by > 60s, it's a DIFFERENT bet
+        // even if description/odds/stake all match — don't flag as duplicate
+        return false;
       }
 
-      // Fallback: match on description + odds + stake
-      return descMatch && oddsMatch && stakeMatch;
+      // FALLBACK: No timestamp on scanned bet — use description + odds + stake.
+      // This is less reliable but best we can do without a timestamp.
+      if (!bet.placedAt) {
+        const totalStake = existing.stakeCashUnits + existing.stakeFreePlayUnits;
+        const stakeMatch = bet.stake > 0 && totalStake === bet.stake;
+        if ((descExact || descFuzzy) && oddsMatch && stakeMatch) return true;
+      }
+
+      return false;
     });
   }
 
