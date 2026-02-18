@@ -11,6 +11,7 @@ type MemberCredit = {
   creditLimit: number;
   openExposure: number;
   availableCredit: number;
+  freePlayBalance: number;
 };
 
 type ParsedBet = {
@@ -49,6 +50,8 @@ export function AddBetForm({
   const stake = parseInt(stakeCashUnits) || 0;
   const exceedsCredit =
     !isFreePlay && selectedMember && stake > selectedMember.availableCredit;
+  const exceedsFP =
+    isFreePlay && selectedMember && stake > selectedMember.freePlayBalance;
 
   function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
     return new Promise((resolve, reject) => {
@@ -185,14 +188,14 @@ export function AddBetForm({
           <option value="">Select member...</option>
           {members.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name} ({m.availableCredit} units available)
+              {m.name} ({m.availableCredit} credit{m.freePlayBalance > 0 ? `, ${m.freePlayBalance} FP` : ""})
             </option>
           ))}
         </select>
       </div>
 
-      {/* Credit Panel */}
-      {selectedMember && (
+      {/* Credit / FP Panel */}
+      {selectedMember && !isFreePlay && (
         <div className="bg-gray-900 rounded-lg border border-gray-800 p-3 space-y-2">
           <div className="flex justify-between text-xs text-gray-400">
             <span>Credit: {selectedMember.creditLimit} units</span>
@@ -220,6 +223,14 @@ export function AddBetForm({
                 />
               );
             })()}
+          </div>
+        </div>
+      )}
+      {selectedMember && isFreePlay && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+          <div className="flex justify-between text-xs">
+            <span className="text-blue-400">Free Play Balance</span>
+            <span className="text-blue-300 font-medium">{selectedMember.freePlayBalance} FP</span>
           </div>
         </div>
       )}
@@ -403,6 +414,16 @@ export function AddBetForm({
         </div>
       )}
 
+      {/* FP Balance Warning */}
+      {exceedsFP && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+          <p className="text-red-400 text-sm">
+            Free play stake exceeds balance by{" "}
+            {stake - selectedMember!.freePlayBalance} FP
+          </p>
+        </div>
+      )}
+
       {/* Admin Override */}
       {!isFreePlay && (
         <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
@@ -428,7 +449,8 @@ export function AddBetForm({
           !description ||
           !oddsAmerican ||
           !stakeCashUnits ||
-          (!!exceedsCredit && !overrideCredit)
+          (!!exceedsCredit && !overrideCredit) ||
+          !!exceedsFP
         }
         className={`w-full py-3 ${
           isFreePlay

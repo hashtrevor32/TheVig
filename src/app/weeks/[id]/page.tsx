@@ -61,6 +61,7 @@ export default async function WeekDashboardPage({
       openBetsCount: openBets.length,
       cashPL,
       freePlay,
+      freePlayBalance: wm.member.freePlayBalance,
     };
   });
 

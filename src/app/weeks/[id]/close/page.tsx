@@ -190,6 +190,70 @@ export default async function CloseWeekPage({
         </div>
       )}
 
+      {/* Default 30% Loss Rebate Preview */}
+      {canClose && (() => {
+        // Compute per-member cash P/L for default rebate preview
+        const memberPL = new Map<string, { name: string; cashLoss: number; promoFP: number }>();
+        for (const bet of settledBets) {
+          const pl = (bet.payoutCashUnits ?? 0) - bet.stakeCashUnits;
+          const existing = memberPL.get(bet.memberId);
+          if (existing) {
+            existing.cashLoss += pl;
+          } else {
+            memberPL.set(bet.memberId, { name: bet.member.name, cashLoss: pl, promoFP: 0 });
+          }
+        }
+        // Add promo FP totals per member
+        for (const pr of promoResults) {
+          for (const r of pr.results) {
+            if (r.qualified && r.projectedAward > 0) {
+              const entry = memberPL.get(r.memberId);
+              if (entry) entry.promoFP += r.projectedAward;
+            }
+          }
+        }
+        const rebateEntries = [...memberPL.entries()]
+          .filter(([, v]) => v.cashLoss < 0)
+          .map(([memberId, v]) => {
+            const loss = Math.abs(v.cashLoss);
+            const defaultRebate = Math.floor(loss * 0.3);
+            const topUp = Math.max(0, defaultRebate - v.promoFP);
+            return { memberId, name: v.name, loss, defaultRebate, promoFP: v.promoFP, topUp };
+          })
+          .filter((e) => e.topUp > 0);
+
+        if (rebateEntries.length === 0) return null;
+
+        const totalTopUp = rebateEntries.reduce((s, e) => s + e.topUp, 0);
+
+        return (
+          <div>
+            <h3 className="text-sm font-medium text-green-400 uppercase tracking-wide mb-3">
+              Default 30% Loss Rebate
+            </h3>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-2">
+              {rebateEntries.map((e) => (
+                <div key={e.memberId} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="text-gray-300">{e.name}</span>
+                    <span className="text-gray-600 text-xs ml-2">
+                      {e.loss} loss &times; 30% = {e.defaultRebate}
+                      {e.promoFP > 0 ? ` (promo: ${e.promoFP}, top-up: ${e.topUp})` : ""}
+                    </span>
+                  </div>
+                  <span className="text-green-400 font-medium">+{e.topUp} FP</span>
+                </div>
+              ))}
+              <div className="border-t border-gray-800 pt-2 mt-2 text-center">
+                <span className="text-green-400 text-sm font-medium">
+                  Total rebate top-up: {totalTopUp} FP
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <CloseWeekButton weekId={id} canClose={canClose} />
     </div>
   );

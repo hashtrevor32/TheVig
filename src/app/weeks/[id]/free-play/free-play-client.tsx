@@ -16,7 +16,7 @@ type Award = {
   createdAt: Date;
 };
 
-type Member = { id: string; name: string };
+type Member = { id: string; name: string; freePlayBalance: number };
 
 export function FreePlayClient({
   weekId,
@@ -86,7 +86,7 @@ export function FreePlayClient({
               <option value="">Select member...</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.name} ({m.freePlayBalance} FP)
                 </option>
               ))}
             </select>
@@ -151,10 +151,12 @@ export function FreePlayClient({
                       className={`text-xs px-1.5 py-0.5 rounded ${
                         a.source === "PROMO"
                           ? "bg-purple-500/10 text-purple-400"
+                          : a.source === "DEFAULT_REBATE"
+                          ? "bg-green-500/10 text-green-400"
                           : "bg-gray-700 text-gray-400"
                       }`}
                     >
-                      {a.source}
+                      {a.source === "DEFAULT_REBATE" ? "30% REBATE" : a.source}
                     </span>
                     {a.status === "VOIDED" && (
                       <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">

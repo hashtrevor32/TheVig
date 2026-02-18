@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateCreditLimit } from "@/lib/actions";
+import { updateCreditLimit, setFreePlayBalance } from "@/lib/actions";
 import { useRouter } from "next/navigation";
 
 type MemberStat = {
@@ -13,6 +13,7 @@ type MemberStat = {
   openBetsCount: number;
   cashPL: number;
   freePlay: number;
+  freePlayBalance: number;
 };
 
 export function MemberCards({
@@ -54,7 +55,10 @@ function MemberCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [limitValue, setLimitValue] = useState(String(ms.creditLimit));
+  const [editingFP, setEditingFP] = useState(false);
+  const [fpValue, setFpValue] = useState(String(ms.freePlayBalance));
   const [saving, setSaving] = useState(false);
+  const [savingFP, setSavingFP] = useState(false);
   const router = useRouter();
 
   const pct =
@@ -76,6 +80,22 @@ function MemberCard({
   function handleCancel() {
     setLimitValue(String(ms.creditLimit));
     setEditing(false);
+  }
+
+  async function handleSaveFP() {
+    setSavingFP(true);
+    try {
+      await setFreePlayBalance(ms.memberId, parseInt(fpValue) || 0);
+      setEditingFP(false);
+      router.refresh();
+    } catch {
+      setSavingFP(false);
+    }
+  }
+
+  function handleCancelFP() {
+    setFpValue(String(ms.freePlayBalance));
+    setEditingFP(false);
   }
 
   return (
@@ -156,6 +176,50 @@ function MemberCard({
             style={{ width: `${Math.min(pct, 100)}%` }}
           />
         </div>
+      </div>
+
+      {/* FP Balance */}
+      <div className="flex justify-between text-xs text-gray-500">
+        {editingFP ? (
+          <div className="flex items-center gap-2">
+            <span className="text-blue-400">FP:</span>
+            <input
+              type="number"
+              value={fpValue}
+              onChange={(e) => setFpValue(e.target.value)}
+              className="w-20 px-2 py-0.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+              min="0"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveFP();
+                if (e.key === "Escape") handleCancelFP();
+              }}
+            />
+            <button
+              onClick={handleSaveFP}
+              disabled={savingFP}
+              className="text-green-400 hover:text-green-300 text-xs font-medium"
+            >
+              {savingFP ? "..." : "Save"}
+            </button>
+            <button
+              onClick={handleCancelFP}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <span
+            className={weekStatus === "OPEN" ? "cursor-pointer hover:text-gray-300" : ""}
+            onClick={() => weekStatus === "OPEN" && setEditingFP(true)}
+          >
+            <span className="text-blue-400">FP Balance: {ms.freePlayBalance}</span>
+            {weekStatus === "OPEN" && (
+              <span className="ml-1 text-blue-400/60">&#9998;</span>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="flex gap-2 text-xs text-gray-500">

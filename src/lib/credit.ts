@@ -17,10 +17,11 @@ export async function getOpenExposure(weekId: string, memberId: string): Promise
 export async function getCreditInfo(weekId: string, memberId: string) {
   const weekMember = await prisma.weekMember.findUnique({
     where: { weekId_memberId: { weekId, memberId } },
+    include: { member: { select: { freePlayBalance: true } } },
   });
 
   if (!weekMember) {
-    return { creditLimit: 0, openExposure: 0, availableCredit: 0 };
+    return { creditLimit: 0, openExposure: 0, availableCredit: 0, freePlayBalance: 0 };
   }
 
   const openExposure = await getOpenExposure(weekId, memberId);
@@ -30,6 +31,7 @@ export async function getCreditInfo(weekId: string, memberId: string) {
     creditLimit: weekMember.creditLimitUnits,
     openExposure,
     availableCredit,
+    freePlayBalance: weekMember.member.freePlayBalance,
   };
 }
 

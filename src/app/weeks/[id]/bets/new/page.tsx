@@ -16,7 +16,7 @@ export default async function AddBetPage({
     where: { id },
     include: {
       weekMembers: {
-        include: { member: true },
+        include: { member: { select: { id: true, name: true, freePlayBalance: true } } },
       },
       bets: { where: { status: "OPEN" } },
     },
@@ -35,6 +35,7 @@ export default async function AddBetPage({
       creditLimit: wm.creditLimitUnits,
       openExposure,
       availableCredit: wm.creditLimitUnits - openExposure,
+      freePlayBalance: wm.member.freePlayBalance,
     };
   });
 

@@ -29,6 +29,7 @@ export default async function FreePlayPage({
   const members = week.weekMembers.map((wm) => ({
     id: wm.memberId,
     name: wm.member.name,
+    freePlayBalance: wm.member.freePlayBalance,
   }));
 
   return (

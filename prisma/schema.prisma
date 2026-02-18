@@ -27,15 +27,16 @@ model Operator {
 }
 
 model Member {
-  id             String          @id @default(cuid())
-  groupId        String
-  group          Group           @relation(fields: [groupId], references: [id])
-  name           String
-  createdAt      DateTime        @default(now())
-  weekMembers    WeekMember[]
-  bets           Bet[]
-  freePlayAwards FreePlayAward[]
-  weekStatements WeekStatement[]
+  id              String          @id @default(cuid())
+  groupId         String
+  group           Group           @relation(fields: [groupId], references: [id])
+  name            String
+  freePlayBalance Int             @default(0)
+  createdAt       DateTime        @default(now())
+  weekMembers     WeekMember[]
+  bets            Bet[]
+  freePlayAwards  FreePlayAward[]
+  weekStatements  WeekStatement[]
 }
 
 enum WeekStatus {
@@ -106,6 +107,7 @@ model Bet {
 enum FreePlaySource {
   PROMO
   MANUAL
+  DEFAULT_REBATE
 }
 
 enum FreePlayStatus {

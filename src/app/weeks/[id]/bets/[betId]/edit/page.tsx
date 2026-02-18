@@ -45,6 +45,7 @@ export default async function EditBetPage({
         weekId={id}
         memberName={bet.member.name}
         availableCredit={credit.availableCredit + bet.stakeCashUnits}
+        freePlayBalance={credit.freePlayBalance + bet.stakeFreePlayUnits}
       />
     </div>
   );

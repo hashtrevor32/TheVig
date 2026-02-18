@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./prisma";
 import { getCreditInfo } from "./credit";
-import { generateWeekStatements } from "./settlement";
+import { generateWeekStatements, generateDefaultRebates, updateFreePlayBalances } from "./settlement";
 import { generatePromoAwards } from "./promo-engine";
 import { getGroupId, requireSession } from "./auth";
 
@@ -130,6 +130,21 @@ export async function createBet(data: {
     }
   }
 
+  const fpStake = data.stakeFreePlayUnits ?? 0;
+
+  if (fpStake > 0) {
+    // Validate and deduct FP balance atomically
+    const member = await prisma.member.findUnique({
+      where: { id: data.memberId },
+      select: { freePlayBalance: true },
+    });
+    if (!member || fpStake > member.freePlayBalance) {
+      throw new Error(
+        `FP stake ${fpStake} exceeds available FP balance ${member?.freePlayBalance ?? 0}`
+      );
+    }
+  }
+
   await prisma.bet.create({
     data: {
       weekId: data.weekId,
@@ -138,9 +153,17 @@ export async function createBet(data: {
       eventKey: data.eventKey || null,
       oddsAmerican: data.oddsAmerican,
       stakeCashUnits: data.stakeCashUnits,
-      stakeFreePlayUnits: data.stakeFreePlayUnits ?? 0,
+      stakeFreePlayUnits: fpStake,
     },
   });
+
+  if (fpStake > 0) {
+    await prisma.member.update({
+      where: { id: data.memberId },
+      data: { freePlayBalance: { decrement: fpStake } },
+    });
+  }
+
   revalidatePath(`/weeks/${data.weekId}`);
 }
 
@@ -224,6 +247,31 @@ export async function editBet(data: {
     }
   }
 
+  // Handle FP balance delta
+  if (data.stakeFreePlayUnits !== undefined && data.stakeFreePlayUnits !== bet.stakeFreePlayUnits) {
+    const delta = data.stakeFreePlayUnits - bet.stakeFreePlayUnits;
+    if (delta > 0) {
+      const member = await prisma.member.findUnique({
+        where: { id: bet.memberId },
+        select: { freePlayBalance: true },
+      });
+      if (!member || delta > member.freePlayBalance) {
+        throw new Error(
+          `Additional FP ${delta} exceeds available FP balance ${member?.freePlayBalance ?? 0}`
+        );
+      }
+      await prisma.member.update({
+        where: { id: bet.memberId },
+        data: { freePlayBalance: { decrement: delta } },
+      });
+    } else if (delta < 0) {
+      await prisma.member.update({
+        where: { id: bet.memberId },
+        data: { freePlayBalance: { increment: Math.abs(delta) } },
+      });
+    }
+  }
+
   await prisma.bet.update({
     where: { id: data.betId },
     data: {
@@ -251,6 +299,15 @@ export async function voidBet(betId: string) {
     where: { id: betId },
     data: { status: "VOIDED" },
   });
+
+  // Return FP to member balance
+  if (bet.stakeFreePlayUnits > 0) {
+    await prisma.member.update({
+      where: { id: bet.memberId },
+      data: { freePlayBalance: { increment: bet.stakeFreePlayUnits } },
+    });
+  }
+
   revalidatePath(`/weeks/${bet.weekId}`);
 }
 
@@ -331,6 +388,13 @@ export async function createFreePlayAward(data: {
       notes: data.notes || null,
     },
   });
+
+  // Immediately credit member's FP balance
+  await prisma.member.update({
+    where: { id: data.memberId },
+    data: { freePlayBalance: { increment: data.amountUnits } },
+  });
+
   revalidatePath(`/weeks/${data.weekId}`);
 }
 
@@ -347,7 +411,28 @@ export async function voidFreePlayAward(awardId: string) {
     where: { id: awardId },
     data: { status: "VOIDED" },
   });
+
+  // Deduct from member's FP balance
+  await prisma.member.update({
+    where: { id: award.memberId },
+    data: { freePlayBalance: { decrement: award.amountUnits } },
+  });
+
   revalidatePath(`/weeks/${award.weekId}`);
+}
+
+// ── Set FP Balance ──
+
+export async function setFreePlayBalance(memberId: string, balance: number) {
+  const groupId = await getGroupId();
+  const member = await prisma.member.findUnique({ where: { id: memberId } });
+  if (!member || member.groupId !== groupId) throw new Error("Member not found");
+
+  await prisma.member.update({
+    where: { id: memberId },
+    data: { freePlayBalance: balance },
+  });
+  revalidatePath("/members");
 }
 
 // ── Close Week ──
@@ -362,6 +447,8 @@ export async function closeWeek(weekId: string) {
   }
 
   await generatePromoAwards(weekId);
+  await generateDefaultRebates(weekId);
+  await updateFreePlayBalances(weekId);
   await generateWeekStatements(weekId);
 
   await prisma.week.update({

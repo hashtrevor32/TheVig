@@ -18,11 +18,13 @@ export function EditBetForm({
   weekId,
   memberName,
   availableCredit,
+  freePlayBalance,
 }: {
   bet: BetData;
   weekId: string;
   memberName: string;
   availableCredit: number;
+  freePlayBalance: number;
 }) {
   const [description, setDescription] = useState(bet.description);
   const [eventKey, setEventKey] = useState(bet.eventKey || "");
@@ -76,6 +78,11 @@ export function EditBetForm({
         <span className="text-gray-500 text-sm ml-3">
           Credit: {availableCredit} available
         </span>
+        {freePlayBalance > 0 && (
+          <span className="text-blue-400 text-sm ml-3">
+            FP: {freePlayBalance}
+          </span>
+        )}
       </div>
 
       <form onSubmit={handleSave} className="space-y-3">
