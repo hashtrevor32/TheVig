@@ -4,16 +4,84 @@ import { getSession } from "@/lib/auth";
 
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
 
+// All verified ESPN scoreboard endpoints
 const SPORT_LEAGUES = [
+  // Football
   { sport: "football", league: "nfl" },
-  { sport: "basketball", league: "nba" },
-  { sport: "baseball", league: "mlb" },
-  { sport: "hockey", league: "nhl" },
   { sport: "football", league: "college-football" },
+  { sport: "football", league: "xfl" },
+  { sport: "football", league: "cfl" },
+  { sport: "football", league: "ufl" },
+  // Basketball
+  { sport: "basketball", league: "nba" },
   { sport: "basketball", league: "mens-college-basketball" },
+  { sport: "basketball", league: "wnba" },
+  { sport: "basketball", league: "womens-college-basketball" },
+  { sport: "basketball", league: "nba-development" },
+  // Baseball
+  { sport: "baseball", league: "mlb" },
+  { sport: "baseball", league: "college-baseball" },
+  // Hockey
+  { sport: "hockey", league: "nhl" },
+  { sport: "hockey", league: "mens-college-hockey" },
+  // MMA
+  { sport: "mma", league: "ufc" },
+  { sport: "mma", league: "bellator" },
+  // Tennis
+  { sport: "tennis", league: "atp" },
+  { sport: "tennis", league: "wta" },
+  // Golf
+  { sport: "golf", league: "pga" },
+  { sport: "golf", league: "lpga" },
+  { sport: "golf", league: "liv" },
+  { sport: "golf", league: "eur" },
+  // Racing
+  { sport: "racing", league: "f1" },
+  { sport: "racing", league: "irl" },
+  { sport: "racing", league: "nascar-truck" },
+  { sport: "racing", league: "nhra" },
+  // Lacrosse
+  { sport: "lacrosse", league: "pll" },
+  { sport: "lacrosse", league: "nll" },
+  // Soccer — Top Leagues
   { sport: "soccer", league: "usa.1" },
   { sport: "soccer", league: "eng.1" },
-  { sport: "mma", league: "ufc" },
+  { sport: "soccer", league: "esp.1" },
+  { sport: "soccer", league: "ger.1" },
+  { sport: "soccer", league: "ita.1" },
+  { sport: "soccer", league: "fra.1" },
+  { sport: "soccer", league: "mex.1" },
+  { sport: "soccer", league: "por.1" },
+  { sport: "soccer", league: "ned.1" },
+  { sport: "soccer", league: "bra.1" },
+  { sport: "soccer", league: "arg.1" },
+  { sport: "soccer", league: "tur.1" },
+  { sport: "soccer", league: "sco.1" },
+  { sport: "soccer", league: "bel.1" },
+  { sport: "soccer", league: "aus.1" },
+  { sport: "soccer", league: "jpn.1" },
+  // Soccer — Second Divisions
+  { sport: "soccer", league: "eng.2" },
+  { sport: "soccer", league: "esp.2" },
+  { sport: "soccer", league: "ger.2" },
+  { sport: "soccer", league: "ita.2" },
+  { sport: "soccer", league: "fra.2" },
+  // Soccer — International & Cups
+  { sport: "soccer", league: "uefa.champions" },
+  { sport: "soccer", league: "uefa.europa" },
+  { sport: "soccer", league: "uefa.europa.conf" },
+  { sport: "soccer", league: "fifa.world" },
+  { sport: "soccer", league: "conmebol.libertadores" },
+  { sport: "soccer", league: "concacaf.champions_cup" },
+  { sport: "soccer", league: "eng.fa" },
+  { sport: "soccer", league: "eng.league_cup" },
+  { sport: "soccer", league: "esp.copa_del_rey" },
+  { sport: "soccer", league: "ger.dfb_pokal" },
+  { sport: "soccer", league: "ita.coppa_italia" },
+  { sport: "soccer", league: "fra.coupe_de_france" },
+  // Soccer — Women's
+  { sport: "soccer", league: "usa.nwsl" },
+  { sport: "soccer", league: "eng.w.1" },
 ];
 
 type ESPNEvent = {

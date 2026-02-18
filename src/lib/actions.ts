@@ -313,6 +313,77 @@ export async function voidBet(betId: string) {
   revalidatePath(`/weeks/${bet.weekId}`);
 }
 
+// ── Bulk Create Bets ──
+
+export async function createBulkBets(data: {
+  weekId: string;
+  memberId: string;
+  overrideCredit?: boolean;
+  bets: {
+    description: string;
+    eventKey?: string;
+    oddsAmerican: number;
+    stakeCashUnits: number;
+    stakeFreePlayUnits?: number;
+    placedAt?: string;
+  }[];
+}) {
+  await verifyWeekOwnership(data.weekId);
+
+  if (data.bets.length === 0) return { created: 0 };
+
+  const totalCashStake = data.bets.reduce((sum, b) => sum + b.stakeCashUnits, 0);
+  const totalFPStake = data.bets.reduce((sum, b) => sum + (b.stakeFreePlayUnits ?? 0), 0);
+
+  if (!data.overrideCredit && totalCashStake > 0) {
+    const credit = await getCreditInfo(data.weekId, data.memberId);
+    if (totalCashStake > credit.availableCredit) {
+      throw new Error(
+        `Total stake ${totalCashStake} exceeds available credit ${credit.availableCredit}`
+      );
+    }
+  }
+
+  if (totalFPStake > 0) {
+    const member = await prisma.member.findUnique({
+      where: { id: data.memberId },
+      select: { freePlayBalance: true },
+    });
+    if (!member || totalFPStake > member.freePlayBalance) {
+      throw new Error(
+        `Total FP stake ${totalFPStake} exceeds available FP balance ${member?.freePlayBalance ?? 0}`
+      );
+    }
+  }
+
+  await prisma.$transaction(
+    data.bets.map((bet) =>
+      prisma.bet.create({
+        data: {
+          weekId: data.weekId,
+          memberId: data.memberId,
+          description: bet.description,
+          eventKey: bet.eventKey || null,
+          oddsAmerican: bet.oddsAmerican,
+          stakeCashUnits: bet.stakeCashUnits,
+          stakeFreePlayUnits: bet.stakeFreePlayUnits ?? 0,
+          ...(bet.placedAt ? { placedAt: new Date(bet.placedAt) } : {}),
+        },
+      })
+    )
+  );
+
+  if (totalFPStake > 0) {
+    await prisma.member.update({
+      where: { id: data.memberId },
+      data: { freePlayBalance: { decrement: totalFPStake } },
+    });
+  }
+
+  revalidatePath(`/weeks/${data.weekId}`);
+  return { created: data.bets.length };
+}
+
 // ── Bulk Settle ──
 
 export async function bulkSettle(

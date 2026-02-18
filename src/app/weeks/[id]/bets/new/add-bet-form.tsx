@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { createBet } from "@/lib/actions";
+import { createBet, createBulkBets } from "@/lib/actions";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2, X, Sparkles } from "lucide-react";
+import { Camera, Loader2, X, Sparkles, ClipboardPaste, CheckCircle2 } from "lucide-react";
 
 type MemberCredit = {
   id: string;
@@ -59,6 +59,15 @@ export function AddBetForm({
   const [skippedBets, setSkippedBets] = useState<ParsedBet[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Paste text state
+  const [showPasteBox, setShowPasteBox] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [parsingText, setParsingText] = useState(false);
+
+  // Bulk add state
+  const [addingAll, setAddingAll] = useState(false);
+  const [bulkSuccess, setBulkSuccess] = useState<string | null>(null);
 
   const selectedMember = members.find((m) => m.id === memberId);
   const stake = parseInt(stakeCashUnits) || 0;
@@ -117,12 +126,29 @@ export function AddBetForm({
     });
   }
 
+  function filterBets(allBets: ParsedBet[], forMemberId: string) {
+    const memberExisting = forMemberId ? existingBetsByMember[forMemberId] || [] : [];
+    const newBets: ParsedBet[] = [];
+    const dupes: ParsedBet[] = [];
+
+    for (const bet of allBets) {
+      if (forMemberId && isDuplicate(bet, memberExisting)) {
+        dupes.push(bet);
+      } else {
+        newBets.push(bet);
+      }
+    }
+
+    return { newBets, dupes };
+  }
+
   async function handleScan(file: File) {
     setScanError("");
     setScanning(true);
     setAllScannedBets([]);
     setParsedBets([]);
     setSkippedBets([]);
+    setBulkSuccess(null);
 
     // Show preview
     const url = URL.createObjectURL(file);
@@ -145,18 +171,7 @@ export function AddBetForm({
       }
 
       if (data.bets && data.bets.length > 0) {
-        // Filter out bets already placed for the selected member
-        const memberExisting = memberId ? existingBetsByMember[memberId] || [] : [];
-        const newBets: ParsedBet[] = [];
-        const dupes: ParsedBet[] = [];
-
-        for (const bet of data.bets) {
-          if (memberId && isDuplicate(bet, memberExisting)) {
-            dupes.push(bet);
-          } else {
-            newBets.push(bet);
-          }
-        }
+        const { newBets, dupes } = filterBets(data.bets, memberId);
 
         setAllScannedBets(data.bets);
         setSkippedBets(dupes);
@@ -181,6 +196,56 @@ export function AddBetForm({
     }
   }
 
+  async function handleParseText() {
+    if (!pasteText.trim()) return;
+
+    setScanError("");
+    setParsingText(true);
+    setAllScannedBets([]);
+    setParsedBets([]);
+    setSkippedBets([]);
+    setPreviewUrl(null);
+    setBulkSuccess(null);
+
+    try {
+      const res = await fetch("/api/parse-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to parse text");
+      }
+
+      if (data.bets && data.bets.length > 0) {
+        const { newBets, dupes } = filterBets(data.bets, memberId);
+
+        setAllScannedBets(data.bets);
+        setSkippedBets(dupes);
+
+        if (newBets.length > 0) {
+          setParsedBets(newBets);
+          fillBet(newBets[0]);
+        } else if (dupes.length > 0) {
+          setScanError(`All ${dupes.length} bet(s) already exist for this member.`);
+        } else {
+          setScanError("No bets found in text.");
+        }
+      } else {
+        setScanError("No bets found in pasted text. Try different text.");
+      }
+    } catch (err) {
+      setScanError(
+        err instanceof Error ? err.message : "Failed to parse text"
+      );
+    } finally {
+      setParsingText(false);
+    }
+  }
+
   function fillBet(bet: ParsedBet) {
     setDescription(bet.description);
     setOddsAmerican(String(bet.oddsAmerican));
@@ -191,18 +256,10 @@ export function AddBetForm({
 
   function handleMemberChange(newMemberId: string) {
     setMemberId(newMemberId);
+    setBulkSuccess(null);
     // Re-filter scanned bets for new member
     if (allScannedBets.length > 0) {
-      const memberExisting = newMemberId ? existingBetsByMember[newMemberId] || [] : [];
-      const newBets: ParsedBet[] = [];
-      const dupes: ParsedBet[] = [];
-      for (const bet of allScannedBets) {
-        if (newMemberId && isDuplicate(bet, memberExisting)) {
-          dupes.push(bet);
-        } else {
-          newBets.push(bet);
-        }
-      }
+      const { newBets, dupes } = filterBets(allScannedBets, newMemberId);
       setParsedBets(newBets);
       setSkippedBets(dupes);
       setScanError("");
@@ -220,12 +277,52 @@ export function AddBetForm({
     setSkippedBets([]);
     setPreviewUrl(null);
     setScanError("");
+    setBulkSuccess(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleAddAll() {
+    if (!memberId || parsedBets.length === 0) return;
+
+    setAddingAll(true);
+    setError("");
+    setBulkSuccess(null);
+
+    try {
+      const result = await createBulkBets({
+        weekId,
+        memberId,
+        overrideCredit: isFreePlay || overrideCredit,
+        bets: parsedBets.map((b) => ({
+          description: b.description,
+          eventKey: b.eventKey || undefined,
+          oddsAmerican: b.oddsAmerican,
+          stakeCashUnits: isFreePlay ? 0 : (b.stake > 0 ? b.stake : stake),
+          stakeFreePlayUnits: isFreePlay ? (b.stake > 0 ? b.stake : stake) : 0,
+          placedAt: b.placedAt || undefined,
+        })),
+      });
+
+      setBulkSuccess(`${result.created} bet${result.created > 1 ? "s" : ""} added successfully!`);
+      setParsedBets([]);
+      setAllScannedBets([]);
+      setDescription("");
+      setOddsAmerican("");
+      setStakeCashUnits("");
+      setEventKey("");
+      setPlacedAt(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add bets");
+    } finally {
+      setAddingAll(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setBulkSuccess(null);
     if (!memberId || !description || !oddsAmerican || !stakeCashUnits) return;
 
     setLoading(true);
@@ -326,8 +423,8 @@ export function AddBetForm({
         </div>
       )}
 
-      {/* AI Scan Button */}
-      <div>
+      {/* AI Scan + Paste Buttons */}
+      <div className="space-y-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -338,31 +435,93 @@ export function AddBetForm({
             if (file) handleScan(file);
           }}
         />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={scanning}
-          className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-700 disabled:to-gray-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
-        >
-          {scanning ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              Scanning bet slip...
-            </>
-          ) : (
-            <>
-              <Camera size={18} />
-              <Sparkles size={14} />
-              Scan Bet Slip
-            </>
-          )}
-        </button>
-        <p className="text-gray-600 text-xs text-center mt-1">
-          Take a photo or upload a screenshot — AI fills the form
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning || parsingText}
+            className="py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-700 disabled:to-gray-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-all text-sm"
+          >
+            {scanning ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <Camera size={16} />
+                <Sparkles size={12} />
+                Scan Slip
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowPasteBox(!showPasteBox);
+              setBulkSuccess(null);
+            }}
+            disabled={scanning || parsingText}
+            className={`py-3 font-medium rounded-lg flex items-center justify-center gap-2 transition-all text-sm ${
+              showPasteBox
+                ? "bg-orange-600 hover:bg-orange-700 text-white"
+                : "bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
+            } disabled:bg-gray-700 disabled:text-gray-500`}
+          >
+            <ClipboardPaste size={16} />
+            Paste Text
+          </button>
+        </div>
+        <p className="text-gray-600 text-xs text-center">
+          Upload a screenshot or paste text from your sportsbook — AI extracts all bets
         </p>
       </div>
 
-      {/* Scan Preview & Results */}
+      {/* Paste Text Box */}
+      {showPasteBox && (
+        <div className="bg-gray-900 rounded-xl border border-orange-500/30 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-orange-400 font-medium">Paste Bet History</span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPasteBox(false);
+                setPasteText("");
+              }}
+              className="text-gray-500 hover:text-gray-300"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder="Paste your bet history or active bets text here... Include timestamps, odds, stakes — AI will extract everything."
+            rows={6}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-y"
+          />
+          <button
+            type="button"
+            onClick={handleParseText}
+            disabled={parsingText || !pasteText.trim()}
+            className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+          >
+            {parsingText ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Parsing bets...
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                Parse Bets
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Scan Preview */}
       {previewUrl && (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-3 space-y-3">
           <div className="flex items-center justify-between">
@@ -386,12 +545,47 @@ export function AddBetForm({
         </div>
       )}
 
-      {/* Multiple Bets Detected */}
+      {/* Scan error without preview (from paste) */}
+      {!previewUrl && scanError && (
+        <p className="text-red-400 text-xs">{scanError}</p>
+      )}
+
+      {/* Bulk Success */}
+      {bulkSuccess && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center gap-2">
+          <CheckCircle2 size={16} className="text-green-400" />
+          <p className="text-green-400 text-sm font-medium">{bulkSuccess}</p>
+        </div>
+      )}
+
+      {/* Multiple Bets Detected — with Add All button */}
       {parsedBets.length > 1 && (
         <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 space-y-2">
-          <p className="text-purple-400 text-xs font-medium">
-            {parsedBets.length} bets detected — submit one at a time
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-purple-400 text-xs font-medium">
+              {parsedBets.length} bets detected
+            </p>
+            {memberId && (
+              <button
+                type="button"
+                onClick={handleAddAll}
+                disabled={addingAll || !memberId}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                {addingAll ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={12} />
+                    Add All {parsedBets.length}
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           <div className="space-y-1">
             {parsedBets.map((b, i) => (
               <button
@@ -408,9 +602,41 @@ export function AddBetForm({
                 {b.description} ({b.oddsAmerican > 0 ? "+" : ""}
                 {b.oddsAmerican})
                 {b.stake > 0 && ` · ${b.stake} units`}
+                {b.placedAt && (
+                  <span className="text-gray-600 ml-1">· {b.placedAt}</span>
+                )}
               </button>
             ))}
           </div>
+          {!memberId && (
+            <p className="text-yellow-400 text-xs">
+              Select a member above to use Add All
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Single parsed bet — show Add All for 1 bet too */}
+      {parsedBets.length === 1 && memberId && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleAddAll}
+            disabled={addingAll}
+            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+          >
+            {addingAll ? (
+              <>
+                <Loader2 size={12} className="animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={12} />
+                Quick Add
+              </>
+            )}
+          </button>
         </div>
       )}
 
