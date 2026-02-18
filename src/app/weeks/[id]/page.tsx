@@ -3,7 +3,7 @@ import { requireWeekAccess, getGroupId } from "@/lib/auth";
 import Link from "next/link";
 import { WeekDashboardClient } from "./week-dashboard-client";
 import { MemberCards } from "./member-cards";
-import type { LossRebateRule } from "@/lib/promo-engine";
+import { type LossRebateRule, matchesEventPattern } from "@/lib/promo-engine";
 
 export default async function WeekDashboardPage({
   params,
@@ -64,6 +64,7 @@ export default async function WeekDashboardPage({
         if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
         if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
         if (b.stakeCashUnits <= 0) return false;
+        if (!matchesEventPattern(b.eventKey, b.description, rule.eventKeyPattern)) return false;
         return true;
       });
 
@@ -230,6 +231,9 @@ export default async function WeekDashboardPage({
                       <p className="text-white text-sm font-medium">{p.name}</p>
                       <p className="text-gray-500 text-xs">
                         {rule.percentBack}% back &middot; Min {rule.minHandleUnits} units &middot; Cap {rule.capUnits}
+                        {rule.eventKeyPattern && (
+                          <span className="text-purple-400"> &middot; {rule.eventKeyPattern}</span>
+                        )}
                       </p>
                     </div>
                     <span className="text-purple-400 text-xs">Progress &rarr;</span>

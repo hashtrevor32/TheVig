@@ -9,7 +9,21 @@ export type LossRebateRule = {
   oddsMin?: number | null; // minimum American odds (e.g. -200)
   oddsMax?: number | null; // maximum American odds
   disqualifyBothSides: boolean; // DQ if member bet both sides of same event
+  eventKeyPattern?: string | null; // filter: only bets whose eventKey or description contains this (case-insensitive). e.g. "golf", "nfl", "nba"
 };
+
+/** Check if a bet matches the promo's eventKeyPattern filter */
+export function matchesEventPattern(
+  eventKey: string | null,
+  description: string,
+  pattern: string | null | undefined
+): boolean {
+  if (!pattern) return true; // no filter = all bets count
+  const p = pattern.toLowerCase();
+  const ek = (eventKey || "").toLowerCase();
+  const desc = description.toLowerCase();
+  return ek.includes(p) || desc.includes(p);
+}
 
 export type PromoMemberResult = {
   memberId: string;
@@ -57,6 +71,7 @@ export async function computePromoResults(
       if (rule.oddsMin != null && b.oddsAmerican < rule.oddsMin) return false;
       if (rule.oddsMax != null && b.oddsAmerican > rule.oddsMax) return false;
       if (b.stakeCashUnits <= 0) return false;
+      if (!matchesEventPattern(b.eventKey, b.description, rule.eventKeyPattern)) return false;
       return true;
     });
 

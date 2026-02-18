@@ -43,7 +43,7 @@ For each bet, provide:
 - isFreePlay: If the wager amount shown is $0.00 or "Free Bet" or "Free Play" or "Bonus Bet", set this to true. A $0 wager means it was placed using free play credits — in that case, look for the "To Win" or potential payout amount and use that as the stake instead. Otherwise false.
 
 IMPORTANT: If you see "Agent Payment" as the payment or funding source for a bet, SKIP that bet entirely — do NOT include it in the output. Agent Payment bets are free play credits given by the operator and should not be tracked as new bets.
-- eventKey: A short identifier for the game/event (e.g. "chiefs-bills-feb17", "casino-blackjack"). Use lowercase with hyphens.
+- eventKey: A short identifier for the game/event. MUST start with the sport/league prefix, then the event. Examples: "nfl-chiefs-bills-feb17", "nba-lakers-celtics-feb17", "golf-pga-genesis-invitational", "mlb-yankees-redsox-mar15", "nhl-bruins-rangers-feb17", "soccer-epl-liverpool-chelsea", "tennis-aus-open-djokovic-sinner", "ufc-306-main-event", "casino-blackjack", "casino-roulette". Always use lowercase with hyphens. The sport prefix is critical for tracking promo eligibility.
 - placedAt: The exact date/time the bet was placed if visible (e.g. "2/17/2026 3:45:12 PM"). Include seconds if shown. If not visible, use null.
 
 SETTLED/RESULT DETECTION:

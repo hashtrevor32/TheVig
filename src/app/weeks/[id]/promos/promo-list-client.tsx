@@ -70,7 +70,11 @@ export function PromoListClient({
               <div>
                 <p className="text-white font-medium">{p.name}</p>
                 <p className="text-gray-500 text-xs mt-0.5">
-                  {rule.percentBack}% back on losses &middot; Min {rule.minHandleUnits} units &middot; Cap {rule.capUnits} units
+                  {rule.percentBack}% back on losses
+                  {rule.eventKeyPattern && (
+                    <span className="text-purple-400"> ({rule.eventKeyPattern})</span>
+                  )}
+                  {" "}&middot; Min {rule.minHandleUnits} units &middot; Cap {rule.capUnits} units
                 </p>
               </div>
               <span

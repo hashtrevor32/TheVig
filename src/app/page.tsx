@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getGroupId } from "@/lib/auth";
 import Link from "next/link";
+import { WeeklyReport } from "./weekly-report";
 
 export default async function DashboardPage() {
   const groupId = await getGroupId();
@@ -21,6 +22,82 @@ export default async function DashboardPage() {
   const openBets = await prisma.bet.count({ where: { status: "OPEN", week: { groupId } } });
   const closedWeeks = await prisma.week.count({ where: { groupId, status: "CLOSED" } });
 
+  // Fetch the most recently closed week for the weekly report
+  const lastClosedWeek = await prisma.week.findFirst({
+    where: { groupId, status: "CLOSED" },
+    orderBy: { closedAt: "desc" },
+    include: {
+      weekStatements: {
+        include: { member: true },
+        orderBy: { weeklyScoreUnits: "desc" },
+      },
+      freePlayAwards: {
+        where: { status: "EARNED" },
+        include: { member: true },
+      },
+      bets: {
+        where: { status: "SETTLED" },
+      },
+    },
+  });
+
+  // Build the report data
+  let reportData: {
+    weekId: string;
+    weekName: string;
+    closedAt: string;
+    members: {
+      name: string;
+      cashPL: number;
+      freePlayEarned: number;
+      weeklyScore: number;
+      owesHouse: number;
+      houseOwes: number;
+      freePlayOwed: number;
+      totalBets: number;
+      wins: number;
+      losses: number;
+    }[];
+  } | null = null;
+
+  if (lastClosedWeek && lastClosedWeek.weekStatements.length > 0) {
+    const memberBetStats = new Map<string, { total: number; wins: number; losses: number }>();
+    for (const bet of lastClosedWeek.bets) {
+      const existing = memberBetStats.get(bet.memberId) || { total: 0, wins: 0, losses: 0 };
+      existing.total++;
+      if (bet.result === "WIN") existing.wins++;
+      if (bet.result === "LOSS") existing.losses++;
+      memberBetStats.set(bet.memberId, existing);
+    }
+
+    // Group FP awards by member for breakdown
+    const fpByMember = new Map<string, number>();
+    for (const award of lastClosedWeek.freePlayAwards) {
+      fpByMember.set(award.memberId, (fpByMember.get(award.memberId) ?? 0) + award.amountUnits);
+    }
+
+    reportData = {
+      weekId: lastClosedWeek.id,
+      weekName: lastClosedWeek.name,
+      closedAt: lastClosedWeek.closedAt?.toISOString() ?? "",
+      members: lastClosedWeek.weekStatements.map((s) => {
+        const betStats = memberBetStats.get(s.memberId) || { total: 0, wins: 0, losses: 0 };
+        return {
+          name: s.member.name,
+          cashPL: s.cashProfitUnits,
+          freePlayEarned: fpByMember.get(s.memberId) ?? s.freePlayEarnedUnits,
+          weeklyScore: s.weeklyScoreUnits,
+          owesHouse: s.owesHouseUnits,
+          houseOwes: s.houseOwesUnits,
+          freePlayOwed: s.houseOwesFreePlayUnits,
+          totalBets: betStats.total,
+          wins: betStats.wins,
+          losses: betStats.losses,
+        };
+      }),
+    };
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -29,6 +106,9 @@ export default async function DashboardPage() {
           Welcome to TheVig — your betting pool tracker
         </p>
       </div>
+
+      {/* Weekly Report — shown first for Monday morning */}
+      {reportData && <WeeklyReport report={reportData} />}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 gap-3">

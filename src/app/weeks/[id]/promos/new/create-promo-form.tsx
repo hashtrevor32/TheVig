@@ -17,6 +17,7 @@ type ParsedPromo = {
     oddsMin: number | null;
     oddsMax: number | null;
     disqualifyBothSides: boolean;
+    eventKeyPattern: string | null;
   };
 };
 
@@ -97,6 +98,9 @@ export function CreatePromoForm({
   function formatRule(rule: ParsedPromo["ruleJson"]) {
     const parts: string[] = [];
     parts.push(`${rule.percentBack}% back on losses`);
+    if (rule.eventKeyPattern) {
+      parts.push(`${rule.eventKeyPattern} bets only`);
+    }
     if (rule.minHandleUnits > 0) {
       parts.push(`min ${rule.minHandleUnits} units bet`);
     }

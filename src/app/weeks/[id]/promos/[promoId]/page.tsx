@@ -40,7 +40,11 @@ export default async function PromoProgressPage({
         </Link>
         <h2 className="text-2xl font-bold text-white">{promo.name}</h2>
         <p className="text-gray-500 text-xs mt-0.5">
-          {rule.percentBack}% back on losses &middot; Min {rule.minHandleUnits} units
+          {rule.percentBack}% back on losses
+          {rule.eventKeyPattern && (
+            <span className="text-purple-400"> ({rule.eventKeyPattern} bets)</span>
+          )}
+          {" "}&middot; Min {rule.minHandleUnits} units
           &middot; Cap {rule.capUnits} units
         </p>
       </div>

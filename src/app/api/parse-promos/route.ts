@@ -41,7 +41,7 @@ The week runs from ${weekStart} to ${weekEnd}.
 Currently the only supported promo type is LOSS_REBATE — where members get a percentage of their losses back as free play if they meet a minimum betting handle.
 
 For each promo found, extract:
-- name: A short descriptive name (e.g. "50% Loss Rebate")
+- name: A short descriptive name (e.g. "50% Golf Loss Rebate", "NFL 30% Back")
 - type: Always "LOSS_REBATE" for now
 - ruleJson: An object with these fields:
   - windowStart: "${weekStart}" (ISO datetime, default to week start)
@@ -52,6 +52,7 @@ For each promo found, extract:
   - oddsMin: minimum American odds or null if no restriction
   - oddsMax: maximum American odds or null if no restriction
   - disqualifyBothSides: true if the promo mentions disqualifying members who bet both sides, false otherwise (default true)
+  - eventKeyPattern: If the promo applies only to a specific sport/event/category (e.g. "golf outrights", "NFL bets", "NBA", "tennis", "soccer"), extract a short lowercase keyword that can be used to match bet eventKeys and descriptions. Examples: "golf", "nfl", "nba", "tennis", "soccer", "mlb", "ufc", "pga". If the promo applies to ALL bets across all sports, use null.
 
 If a promo doesn't clearly map to a loss rebate (e.g. "25 free play for 3+ bets"), still create it as LOSS_REBATE with your best interpretation:
 - For flat bonuses (e.g. "25 free play"), set percentBack to 100 and capUnits to the bonus amount
@@ -74,7 +75,8 @@ Respond ONLY with valid JSON:
         "capUnits": number,
         "oddsMin": number | null,
         "oddsMax": number | null,
-        "disqualifyBothSides": boolean
+        "disqualifyBothSides": boolean,
+        "eventKeyPattern": "string or null"
       }
     }
   ]
