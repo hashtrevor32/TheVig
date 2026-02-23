@@ -34,61 +34,63 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `You are a betting pool promo parser. Parse the following promo description(s) into structured rules.
+          content: `You are a betting pool promo parser for a private sports betting pool. Parse the operator's rough promo description(s) into clean, structured rules. Clean up their language, fix typos, and make the promo names professional.
 
 The week runs from ${weekStart} to ${weekEnd}.
 
-Currently the only supported promo type is LOSS_REBATE — where members get a percentage of their losses back as free play if they meet a minimum betting handle.
+The only supported promo type is LOSS_REBATE — members get a percentage of their NET LOSSES back as free play if they meet a minimum betting handle.
+
+=== HOUSE PROTECTION RULES (MANDATORY — apply these even if the operator doesn't mention them) ===
+
+1. ODDS MINIMUM: ALWAYS default oddsMin to -200 unless the operator specifies differently.
+2. NET LOSS REBATE: Rebate is always on NET losses (wins offset losses). Include "Net Loss" in the promo name.
+3. BOTH-SIDES DQ: ALWAYS default disqualifyBothSides to true.
+4. REBATE CAP: If no cap mentioned, default to 300. NEVER exceed 500.
+5. MINIMUM HANDLE: If not mentioned, default to 250 for sport-wide, 100 for single-game.
+6. EXCLUDED BET TYPES: NEVER use "parlay", "live", or "prop" as betType.
+7. For team sports "sides" promos, use betType "moneyline,spread" (comma-separated).
+8. windowEnd must be end of last day (23:59:59), NOT midnight.
+
+=== PARSING RULES ===
 
 IMPORTANT: Promos usually target a SPECIFIC sport AND/OR a specific bet type. For example:
 - "50% golf outright loss rebate" → sport: "golf", betType: "outright"
-- "30% NFL moneyline rebate" → sport: "nfl", betType: "moneyline"
-- "25% PGA tournament matchup rebate" → sport: "golf", betType: "matchup"
-- "Golf 1st round leader 30% back" → sport: "golf", betType: "round-leader"
-- "NBA player props 40% loss rebate" → sport: "nba", betType: "prop"
-- "50% loss rebate on all bets" → sport: null, betType: null
+- "30% NFL sides" → sport: "nfl", betType: "moneyline,spread"
+- "25% PGA matchup rebate" → sport: "golf", betType: "matchup"
+- "give them 40% back on college hoops" → sport: "college-basketball", betType: "moneyline,spread"
+- "hockey 50 percent back" → sport: "nhl", betType: "moneyline,spread"
 
-You MUST create SEPARATE promos for each distinct sport+betType combination mentioned. For example, "50% golf outright rebate and 30% golf matchup rebate" should produce TWO separate promos, not one.
+You MUST create SEPARATE promos for each distinct sport+betType combination mentioned.
 
-For each promo found, extract:
-- name: A short descriptive name (e.g. "50% Golf Outright Loss Rebate", "NFL ML 30% Back")
-- type: Always "LOSS_REBATE" for now
-- ruleJson: An object with these fields:
-  - windowStart: "${weekStart}" (ISO datetime, default to week start)
-  - windowEnd: "${weekEnd}" (ISO datetime, default to week end)
-  - minHandleUnits: minimum total units bet to qualify (number, default 0 if not mentioned)
-  - percentBack: percentage of losses returned as free play (number, e.g. 50 for 50%)
-  - capUnits: maximum free play award per member (number, default 9999 if no cap mentioned)
-  - oddsMin: minimum American odds or null if no restriction
-  - oddsMax: maximum American odds or null if no restriction
-  - disqualifyBothSides: true if the promo mentions disqualifying members who bet both sides, false otherwise (default true)
-  - sport: The sport/league this promo applies to as a lowercase string, or null if it applies to all sports. Examples: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "mma", "boxing", "cricket", "f1", "nascar", "college-football", "college-basketball", "esports", "casino"
-  - betType: The specific bet type this promo applies to as a lowercase string, or null if it applies to all bet types within the sport. Examples: "outright" (tournament/futures winner), "matchup" (head-to-head), "round-leader" (1st/2nd/3rd round leader), "top-finish" (top 5/10/20), "spread" (point spread), "moneyline" (straight win/ML), "total" (over/under), "prop" (player/team prop), "futures" (season futures), "parlay", "live", "3-ball" (golf 3-ball matchup)
+Clean up the operator's input:
+- Fix spelling/grammar
+- Make names professional: "50% NBA Sides Net Loss Rebate" not "nba 50 prcent back"
+- Infer sport and betType from casual language ("hoops" = college-basketball or nba, "sides" = moneyline,spread, "totals" = total)
+- If they say something vague like "give them 30% back on basketball", create a clean promo with proper defaults
 
-If a promo doesn't clearly map to a loss rebate (e.g. "25 free play for 3+ bets"), still create it as LOSS_REBATE with your best interpretation:
-- For flat bonuses (e.g. "25 free play"), set percentBack to 100 and capUnits to the bonus amount
-- For bet count thresholds, set minHandleUnits to a reasonable equivalent
+Sport values: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "college-football", "college-basketball", "f1", "nascar"
+BetType values: "outright", "matchup", "round-leader", "top-finish", "spread", "moneyline", "total", "3-ball". Comma-separate for multiple (e.g. "moneyline,spread"). NEVER use "parlay", "live", or "prop".
 
-Description:
+Description from operator:
 ${description}
 
 Respond ONLY with valid JSON:
 {
   "promos": [
     {
-      "name": "string",
+      "name": "string - MUST include 'Net Loss' in name",
       "type": "LOSS_REBATE",
       "ruleJson": {
         "windowStart": "string",
         "windowEnd": "string",
-        "minHandleUnits": number,
+        "minHandleUnits": number (default 250),
         "percentBack": number,
-        "capUnits": number,
-        "oddsMin": number | null,
-        "oddsMax": number | null,
-        "disqualifyBothSides": boolean,
+        "capUnits": number (default 300, max 500),
+        "oddsMin": -200,
+        "oddsMax": null,
+        "disqualifyBothSides": true,
         "sport": "string or null",
-        "betType": "string or null"
+        "betType": "string (NEVER parlay/live/prop)"
       }
     }
   ]

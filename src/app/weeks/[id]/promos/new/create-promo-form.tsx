@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPromoBatch } from "@/lib/actions";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2, X, Calendar, Zap, Copy, Check, MessageSquare } from "lucide-react";
+import { Sparkles, Loader2, X, Calendar, Zap, Copy, Check, MessageSquare, Plus } from "lucide-react";
 import { type ParsedPromo, formatPromoRule } from "@/lib/promo-types";
 
 type EventSummary = {
@@ -44,6 +44,11 @@ export function CreatePromoForm({
   const [userEvents, setUserEvents] = useState("");
   const [showUserEvents, setShowUserEvents] = useState(false);
   const [fetchedEvents, setFetchedEvents] = useState<EventSummary[]>([]);
+
+  // Custom promo state
+  const [customDescription, setCustomDescription] = useState("");
+  const [parsingCustom, setParsingCustom] = useState(false);
+  const [customError, setCustomError] = useState("");
 
   // Generated text message state
   const [generatedText, setGeneratedText] = useState("");
@@ -198,6 +203,44 @@ export function CreatePromoForm({
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  async function handleAddCustom() {
+    if (!customDescription.trim()) return;
+    setCustomError("");
+    setParsingCustom(true);
+
+    try {
+      const res = await fetch("/api/parse-promos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: customDescription,
+          weekStart,
+          weekEnd,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to parse");
+      }
+
+      if (data.promos && data.promos.length > 0) {
+        // Merge into existing list
+        setParsedPromos((prev) => [...prev, ...data.promos]);
+        setCustomDescription("");
+      } else {
+        setCustomError("Couldn't parse any promos. Try being more specific.");
+      }
+    } catch (err) {
+      setCustomError(
+        err instanceof Error ? err.message : "Failed to parse custom promos"
+      );
+    } finally {
+      setParsingCustom(false);
     }
   }
 
@@ -416,6 +459,45 @@ export function CreatePromoForm({
               )}
             </div>
           ))}
+
+          {/* Add Your Own Promos */}
+          <div className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Plus size={16} className="text-orange-400" />
+              <span className="text-sm font-medium text-orange-300">
+                Add Your Own Promos
+              </span>
+            </div>
+            <p className="text-gray-400 text-xs">
+              Describe promos in plain English. AI will clean up your wording and apply house rules automatically.
+            </p>
+            <textarea
+              value={customDescription}
+              onChange={(e) => setCustomDescription(e.target.value)}
+              placeholder={"e.g. give them 40% back on hockey sides, 50% on the duke unc game, 30% on soccer moneylines min 500 bet"}
+              rows={3}
+              className="w-full px-3 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+            />
+            {customError && <p className="text-red-400 text-xs">{customError}</p>}
+            <button
+              type="button"
+              onClick={handleAddCustom}
+              disabled={parsingCustom || !customDescription.trim()}
+              className="w-full py-2.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-orange-400 font-medium rounded-lg flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {parsingCustom ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Parsing your promos...
+                </>
+              ) : (
+                <>
+                  <Plus size={16} />
+                  Add to List
+                </>
+              )}
+            </button>
+          </div>
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
