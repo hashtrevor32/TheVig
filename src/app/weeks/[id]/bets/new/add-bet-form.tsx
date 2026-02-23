@@ -255,6 +255,53 @@ export function AddBetForm({
     }
   }
 
+  /** Split large text into chunks by finding natural line-break boundaries. */
+  function splitTextIntoChunks(text: string, maxChunkLength: number): string[] {
+    if (text.length <= maxChunkLength) return [text];
+
+    const chunks: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxChunkLength) {
+        chunks.push(remaining);
+        break;
+      }
+      // Find the last newline within the max length to split on a natural boundary
+      let splitAt = remaining.lastIndexOf("\n", maxChunkLength);
+      if (splitAt <= 0) splitAt = maxChunkLength; // no newline found — hard split
+      chunks.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+
+    return chunks;
+  }
+
+  async function parseTextChunk(text: string): Promise<ParsedBet[]> {
+    const res = await fetch("/api/parse-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(
+        res.status === 504
+          ? "Request timed out — try pasting fewer bets at a time."
+          : "Server error — try pasting fewer bets at a time."
+      );
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to parse text");
+    }
+
+    return data.bets || [];
+  }
+
   async function handleParseText() {
     if (!pasteText.trim()) return;
 
@@ -267,32 +314,26 @@ export function AddBetForm({
     setBulkSuccess(null);
 
     try {
-      const res = await fetch("/api/parse-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: pasteText }),
-      });
+      // Split large text into ~8k char chunks to avoid timeouts
+      const CHUNK_SIZE = 8_000;
+      const chunks = splitTextIntoChunks(pasteText.trim(), CHUNK_SIZE);
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error(
-          res.status === 504
-            ? "Request timed out — try pasting fewer bets at a time."
-            : "Server error — try pasting fewer bets at a time."
-        );
+      let allBets: ParsedBet[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) {
+          setScanError(`Parsing chunk ${i + 1} of ${chunks.length}...`);
+        }
+        const chunkBets = await parseTextChunk(chunks[i]);
+        allBets = [...allBets, ...chunkBets];
       }
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to parse text");
-      }
+      if (allBets.length > 0) {
+        const { newBets, dupes } = filterBets(allBets, memberId);
 
-      if (data.bets && data.bets.length > 0) {
-        const { newBets, dupes } = filterBets(data.bets, memberId);
-
-        setAllScannedBets(data.bets);
+        setAllScannedBets(allBets);
         setSkippedBets(dupes);
+        setScanError("");
 
         if (newBets.length > 0) {
           setParsedBets(newBets);
