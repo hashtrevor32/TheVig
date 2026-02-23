@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPromoBatch } from "@/lib/actions";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2, X, Calendar, Zap } from "lucide-react";
+import { Sparkles, Loader2, X, Calendar, Zap, Copy, Check, MessageSquare } from "lucide-react";
 import { type ParsedPromo, formatPromoRule } from "@/lib/promo-types";
 
 type EventSummary = {
@@ -17,12 +17,14 @@ type EventSummary = {
 
 export function CreatePromoForm({
   weekId,
+  weekName,
   weekStart,
   weekEnd,
   existingPromoNames = [],
   autoSuggest = false,
 }: {
   weekId: string;
+  weekName: string;
   weekStart: string;
   weekEnd: string;
   existingPromoNames?: string[];
@@ -42,6 +44,11 @@ export function CreatePromoForm({
   const [userEvents, setUserEvents] = useState("");
   const [showUserEvents, setShowUserEvents] = useState(false);
   const [fetchedEvents, setFetchedEvents] = useState<EventSummary[]>([]);
+
+  // Generated text message state
+  const [generatedText, setGeneratedText] = useState("");
+  const [generatingText, setGeneratingText] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Auto-suggest on mount if ?suggest=true
   useEffect(() => {
@@ -146,14 +153,51 @@ export function CreatePromoForm({
 
     try {
       await createPromoBatch(weekId, parsedPromos);
-      router.push(`/weeks/${weekId}/promos`);
-      router.refresh();
+
+      // Generate the group text message
+      setGeneratingText(true);
+      try {
+        const res = await fetch("/api/generate-promo-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            promos: parsedPromos,
+            weekName,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.text) {
+          setGeneratedText(data.text);
+        }
+      } catch {
+        // Text generation is non-critical, don't block
+      } finally {
+        setGeneratingText(false);
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create promos"
       );
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(generatedText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = generatedText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -283,8 +327,59 @@ export function CreatePromoForm({
       {parseError && <p className="text-red-400 text-sm">{parseError}</p>}
       {suggestError && <p className="text-red-400 text-sm">{suggestError}</p>}
 
+      {/* Generated Text Message */}
+      {(generatingText || generatedText) && (
+        <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={16} className="text-green-400" />
+            <span className="text-sm font-medium text-green-300">
+              Group Text Message
+            </span>
+          </div>
+
+          {generatingText ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm py-4">
+              <Loader2 size={16} className="animate-spin" />
+              Generating promo announcement...
+            </div>
+          ) : (
+            <>
+              <pre className="whitespace-pre-wrap text-gray-300 text-sm bg-gray-900/60 rounded-lg p-3 max-h-96 overflow-y-auto font-sans leading-relaxed">
+                {generatedText}
+              </pre>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={16} />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} />
+                      Copy to Clipboard
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/weeks/${weekId}/promos`)}
+                  className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium rounded-lg transition-colors text-sm"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Parsed/Suggested Promos Preview */}
-      {parsedPromos.length > 0 && (
+      {parsedPromos.length > 0 && !generatedText && !generatingText && (
         <div className="space-y-3">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
             {parsedPromos.length} promo
@@ -330,9 +425,14 @@ export function CreatePromoForm({
             disabled={creating}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors"
           >
-            {creating
-              ? "Creating..."
-              : `Create ${parsedPromos.length} Promo${parsedPromos.length > 1 ? "s" : ""}`}
+            {creating ? (
+              <>
+                <Loader2 size={18} className="animate-spin inline mr-2" />
+                Creating promos...
+              </>
+            ) : (
+              `Create ${parsedPromos.length} Promo${parsedPromos.length > 1 ? "s" : ""}`
+            )}
           </button>
         </div>
       )}

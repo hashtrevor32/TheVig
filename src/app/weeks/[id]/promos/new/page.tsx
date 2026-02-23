@@ -43,6 +43,7 @@ export default async function NewPromoPage({
 
       <CreatePromoForm
         weekId={id}
+        weekName={week.name}
         weekStart={week.startAt.toISOString()}
         weekEnd={week.endAt.toISOString()}
         existingPromoNames={existingPromoNames}
