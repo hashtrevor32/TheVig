@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
-// Allow up to 60s for large text inputs with many bets
-export const maxDuration = 60;
+// Allow up to 300s for very large text inputs (Vercel Pro limit)
+export const maxDuration = 300;
 
 /** Robustly extract {"bets": [...]} from AI response, handling:
  *  - markdown code blocks
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
-      max_tokens: 8192,
+      max_tokens: 16384,
       messages: [
         {
           role: "user",

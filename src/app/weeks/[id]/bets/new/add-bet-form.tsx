@@ -255,7 +255,8 @@ export function AddBetForm({
     }
   }
 
-  /** Split large text into chunks by finding natural line-break boundaries. */
+  /** Split large text into chunks, splitting on blank-line boundaries
+   *  so individual bet entries don't get cut in half. */
   function splitTextIntoChunks(text: string, maxChunkLength: number): string[] {
     if (text.length <= maxChunkLength) return [text];
 
@@ -267,9 +268,12 @@ export function AddBetForm({
         chunks.push(remaining);
         break;
       }
-      // Find the last newline within the max length to split on a natural boundary
-      let splitAt = remaining.lastIndexOf("\n", maxChunkLength);
-      if (splitAt <= 0) splitAt = maxChunkLength; // no newline found — hard split
+      // Prefer splitting on a blank line (double newline) — keeps bet entries intact
+      let splitAt = remaining.lastIndexOf("\n\n", maxChunkLength);
+      // Fall back to single newline
+      if (splitAt <= 0) splitAt = remaining.lastIndexOf("\n", maxChunkLength);
+      // Last resort — hard split
+      if (splitAt <= 0) splitAt = maxChunkLength;
       chunks.push(remaining.slice(0, splitAt));
       remaining = remaining.slice(splitAt).trimStart();
     }
@@ -314,8 +318,8 @@ export function AddBetForm({
     setBulkSuccess(null);
 
     try {
-      // Split large text into ~8k char chunks to avoid timeouts
-      const CHUNK_SIZE = 8_000;
+      // Split large text into ~30k char chunks to avoid timeouts
+      const CHUNK_SIZE = 30_000;
       const chunks = splitTextIntoChunks(pasteText.trim(), CHUNK_SIZE);
 
       let allBets: ParsedBet[] = [];
