@@ -74,10 +74,11 @@ IMPORTANT RULES:
 - For major/marquee events (playoffs, championship games, golf majors), suggest enhanced promos (higher %, higher caps)
 - Set disqualifyBothSides to true for all promos
 - Set oddsMin and oddsMax to null unless there's a specific reason
-- Use the week start/end as windowStart/windowEnd
+- Use the week start/end as windowStart/windowEnd. IMPORTANT: windowEnd should be end of the last day (23:59:59), NOT midnight. Example: if the week ends Feb 22, use "2026-02-22T23:59:59.000Z" not "2026-02-22T00:00:00.000Z"
+- For promos covering "sides" (point spreads + moneylines), use betType "moneyline,spread" (comma-separated) to match both bet types
 
 Sport values: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "college-football", "college-basketball", "f1", "nascar"
-BetType values: "outright" (winner/futures), "matchup" (head-to-head), "round-leader", "top-finish", "spread", "moneyline", "total" (over/under), "prop" (player/team prop), "futures", "parlay", "live", "3-ball"
+BetType values: "outright" (winner/futures), "matchup" (head-to-head), "round-leader", "top-finish", "spread", "moneyline", "total" (over/under), "prop" (player/team prop), "futures", "parlay", "live", "3-ball". You can use comma-separated values like "moneyline,spread" to match multiple types.
 
 Respond ONLY with valid JSON:
 {

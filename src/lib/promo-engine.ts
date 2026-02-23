@@ -20,7 +20,10 @@ export function matchesPromoFilter(
     if (!bet.sport || bet.sport.toLowerCase() !== rule.sport.toLowerCase()) return false;
   }
   if (rule.betType) {
-    if (!bet.betType || bet.betType.toLowerCase() !== rule.betType.toLowerCase()) return false;
+    if (!bet.betType) return false;
+    // Support comma-separated betTypes (e.g. "moneyline,spread" matches either)
+    const allowedTypes = rule.betType.toLowerCase().split(",").map(t => t.trim());
+    if (!allowedTypes.includes(bet.betType.toLowerCase())) return false;
   }
 
   // If promo has sport or betType set, those are sufficient — skip legacy pattern

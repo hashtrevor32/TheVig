@@ -662,6 +662,18 @@ export async function closeWeek(weekId: string) {
 
 // ── Promos ──
 
+/** Ensure windowEnd is end-of-day (23:59:59) not midnight (00:00:00). */
+function fixWindowEnd(ruleJson: Record<string, unknown>): Record<string, unknown> {
+  if (typeof ruleJson.windowEnd === "string") {
+    const d = new Date(ruleJson.windowEnd);
+    if (!isNaN(d.getTime()) && d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) {
+      d.setUTCHours(23, 59, 59, 999);
+      return { ...ruleJson, windowEnd: d.toISOString() };
+    }
+  }
+  return ruleJson;
+}
+
 export async function createPromo(data: {
   weekId: string;
   name: string;
@@ -675,7 +687,7 @@ export async function createPromo(data: {
       name: data.name,
       type: data.type,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ruleJson: data.ruleJson as any,
+      ruleJson: fixWindowEnd(data.ruleJson) as any,
     },
   });
   revalidatePath(`/weeks/${data.weekId}`);
@@ -693,7 +705,7 @@ export async function createPromoBatch(
         name: p.name,
         type: p.type,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ruleJson: p.ruleJson as any,
+        ruleJson: fixWindowEnd(p.ruleJson) as any,
       },
     });
   }
