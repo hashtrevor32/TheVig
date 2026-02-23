@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
-      max_tokens: 3000,
+      max_tokens: 8000,
       messages: [
         {
           role: "user",
@@ -88,17 +88,21 @@ ${eventsText}${userEventsText}${existingList}
 
 PROMO NAMING: Always include "Net Loss" in the promo name to make it crystal clear. Example: "50% PGA Genesis Outright Net Loss Rebate", "25% NBA Sides Net Loss Rebate". This makes it unambiguous that the rebate is on net losses, not total losing stake.
 
-SPORT-WIDE PROMOS (4-6 promos):
+MINIMUM 15 PROMOS TOTAL. You MUST suggest at least 15 promos. Mix of sport-wide and single-game promos.
+
+SPORT-WIDE PROMOS (8-10 promos):
 - Suggest promos targeting different sport+betType combinations across the whole week
 - ONLY suggest promos for sports with events this week
 - For golf: outright + matchup promos (these are high-margin for the house)
-- For team sports (NFL/NBA/NHL/college): use betType "moneyline,spread" to cover sides
+- For team sports (NFL/NBA/NHL/college): use betType "moneyline,spread" to cover sides. Also suggest separate "total" promos for popular sports.
 - For soccer: moneyline promos
 - For UFC/MMA: moneyline promos
+- Cover as many active sports as possible — if there are NBA, NHL, college basketball, golf, soccer games, each should have at least one promo
+- Vary the percentBack and minHandleUnits across promos to create different tiers (e.g. a lower % with lower min handle AND a higher % with higher min handle for the same sport)
 
-SINGLE-GAME PROMOS (2-4 promos):
-- Identify the BIGGEST/MARQUEE games of the week (rivalry games, nationally televised, playoff implications, ranked matchups)
-- Create single-game promos for these with TIGHTER windows (just that game day)
+SINGLE-GAME PROMOS (5-8 promos):
+- Identify the BIGGEST/MARQUEE games of the week (rivalry games, nationally televised, playoff implications, ranked matchups, top-25 college matchups)
+- Create single-game promos for as many marquee games as possible
 - Single-game promos should have LOWER minHandleUnits (100-300) since it's just one game
 - Use higher percentBack (40-75%) to make them attractive since it's limited to one game
 - Set windowStart and windowEnd to just cover that game day (start of day to 23:59:59)
