@@ -57,7 +57,7 @@ export default async function PromosPage({
           </p>
         </div>
       ) : (
-        <PromoListClient promos={week.promos} weekId={id} weekStatus={week.status} />
+        <PromoListClient promos={week.promos} weekId={id} weekName={week.name} weekStatus={week.status} />
       )}
     </div>
   );
