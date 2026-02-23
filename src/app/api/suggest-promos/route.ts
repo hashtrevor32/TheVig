@@ -53,50 +53,82 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `You are a betting pool promo designer for a private betting pool. Based on the upcoming sports events for this week, suggest exciting promos that the pool operator can run.
+          content: `You are a betting pool promo designer for a private betting pool. Your #1 priority is PROTECTING THE HOUSE from exploitation while still making promos attractive enough to drive action. Based on the upcoming sports events, suggest promos with tight, clear terms that can't be gamed.
 
 Week: ${weekStart} to ${weekEnd}
 
 Upcoming Events (from ESPN):
 ${eventsText}${userEventsText}${existingList}
 
-IMPORTANT RULES:
-- Suggest 4-8 promos targeting different sport+betType combinations based on the events above
-- ONLY suggest promos for sports that actually have events this week (don't suggest NFL promos if no NFL games)
-- Each promo must target a SPECIFIC sport AND bet type (not generic "all sports" promos)
-- Use realistic loss rebate structures for a private pool:
-  - percentBack: 25-75% (higher for premium/marquee events)
-  - minHandleUnits: 200-1000 units (lower barrier for niche events, higher for popular sports)
-  - capUnits: 50-500 units per member
-- For golf tournaments: suggest outright winner + tournament matchup promos (maybe round leader too)
-- For NFL/NBA/NHL: suggest spread, moneyline, and/or player prop promos
-- For UFC fights: suggest moneyline promos
-- For major/marquee events (playoffs, championship games, golf majors), suggest enhanced promos (higher %, higher caps)
-- Set disqualifyBothSides to true for all promos
-- Set oddsMin and oddsMax to null unless there's a specific reason
-- Use the week start/end as windowStart/windowEnd. IMPORTANT: windowEnd should be end of the last day (23:59:59), NOT midnight. Example: if the week ends Feb 22, use "2026-02-22T23:59:59.000Z" not "2026-02-22T00:00:00.000Z"
-- For promos covering "sides" (point spreads + moneylines), use betType "moneyline,spread" (comma-separated) to match both bet types
+=== HOUSE PROTECTION RULES (MANDATORY — every promo MUST follow ALL of these) ===
+
+1. ODDS MINIMUM: ALWAYS set oddsMin to -200. This prevents members from loading up on massive favorites (-500, -1000) where loss risk is tiny but they pad their handle to qualify. Members must take real risk.
+
+2. NET LOSS REBATE: The rebate % applies to the member's NET P&L on eligible bets (wins offset losses). If a member bets 1000 and wins back 700, their net loss is 300 — rebate applies to 300, NOT to the full 1000. If they're net positive on eligible bets, they get $0 rebate. This is enforced in code.
+
+3. BOTH-SIDES DISQUALIFICATION: ALWAYS set disqualifyBothSides to true. If a member bets both sides of the same event (e.g. Team A spread AND Team B spread), they are FULLY DISQUALIFIED from the entire promo — not just that game, the ENTIRE promo. This prevents hedging/arbing within the promo.
+
+4. REBATE CAP: ALWAYS set a capUnits that limits max house payout per member per promo. Use 100-300 for regular events, up to 500 for major championships or single-game promos. ABSOLUTE MAX is 500 — NEVER exceed 500 on any promo. This is the hard ceiling no matter how much they lose.
+
+5. MINIMUM HANDLE: Set minHandleUnits high enough that members must put meaningful money at risk. Use 250-750 for regular sports, 500-1000 for popular sports with heavy action. Don't make it easy to qualify.
+
+6. EXCLUDED BET TYPES — NEVER use these as eligible betTypes:
+   - "parlay" — too easy to construct low-risk parlays that inflate handle
+   - "live" — members can exploit closing line value and mid-game information
+   - "prop" — prop markets have wider lines that can be arbitraged
+   Only use: "outright", "matchup", "round-leader", "top-finish", "spread", "moneyline", "total", "3-ball"
+
+7. FREE PLAY EXCLUDED: Bets placed with free play credits (stakeCashUnits = 0) do NOT count toward handle or losses. Only real cash bets count. This is enforced in code.
+
+8. SPECIFIC TARGETING: Every promo must target a SPECIFIC sport AND bet type. No generic "all sports" or "any bet" promos — those are too easy to exploit across correlated markets.
+
+9. CONSERVATIVE PERCENTAGES: Use 25-50% rebate for regular events. Only go up to 75% for truly major events (Super Bowl, March Madness Final Four, Masters, World Series). The higher the %, the more the house risks.
+
+=== PROMO DESIGN GUIDELINES ===
+
+PROMO NAMING: Always include "Net Loss" in the promo name to make it crystal clear. Example: "50% PGA Genesis Outright Net Loss Rebate", "25% NBA Sides Net Loss Rebate". This makes it unambiguous that the rebate is on net losses, not total losing stake.
+
+SPORT-WIDE PROMOS (4-6 promos):
+- Suggest promos targeting different sport+betType combinations across the whole week
+- ONLY suggest promos for sports with events this week
+- For golf: outright + matchup promos (these are high-margin for the house)
+- For team sports (NFL/NBA/NHL/college): use betType "moneyline,spread" to cover sides
+- For soccer: moneyline promos
+- For UFC/MMA: moneyline promos
+
+SINGLE-GAME PROMOS (2-4 promos):
+- Identify the BIGGEST/MARQUEE games of the week (rivalry games, nationally televised, playoff implications, ranked matchups)
+- Create single-game promos for these with TIGHTER windows (just that game day)
+- Single-game promos should have LOWER minHandleUnits (100-300) since it's just one game
+- Use higher percentBack (40-75%) to make them attractive since it's limited to one game
+- Set windowStart and windowEnd to just cover that game day (start of day to 23:59:59)
+- Name should include the specific matchup, e.g. "50% Lakers vs Celtics Sides Net Loss Rebate"
+
+GENERAL RULES:
+- windowEnd must be end of last day (23:59:59), NOT midnight
+- For "sides" promos, use betType "moneyline,spread" (comma-separated)
+- capUnits MAXIMUM is 500 on ANY promo — this is a hard cap
 
 Sport values: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "college-football", "college-basketball", "f1", "nascar"
-BetType values: "outright" (winner/futures), "matchup" (head-to-head), "round-leader", "top-finish", "spread", "moneyline", "total" (over/under), "prop" (player/team prop), "futures", "parlay", "live", "3-ball". You can use comma-separated values like "moneyline,spread" to match multiple types.
+BetType values: "outright", "matchup", "round-leader", "top-finish", "spread", "moneyline", "total", "3-ball". Comma-separate for multiple (e.g. "moneyline,spread"). NEVER use "parlay", "live", or "prop".
 
 Respond ONLY with valid JSON:
 {
   "promos": [
     {
-      "name": "string - short descriptive name like '50% PGA Genesis Outright Rebate'",
+      "name": "string - MUST include 'Net Loss' in name, e.g. '50% PGA Genesis Outright Net Loss Rebate'",
       "type": "LOSS_REBATE",
       "ruleJson": {
         "windowStart": "${weekStart}",
         "windowEnd": "${weekEnd}",
         "minHandleUnits": number,
-        "percentBack": number,
-        "capUnits": number,
-        "oddsMin": null,
+        "percentBack": number (25-50 for regular sport-wide, 40-75 for single-game or majors),
+        "capUnits": number (100-500, NEVER exceed 500),
+        "oddsMin": -200,
         "oddsMax": null,
         "disqualifyBothSides": true,
         "sport": "string",
-        "betType": "string"
+        "betType": "string (NEVER parlay/live/prop)"
       }
     }
   ]
