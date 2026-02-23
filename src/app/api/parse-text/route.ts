@@ -64,19 +64,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { text } = await req.json();
+  let text: string;
+  try {
+    const body = await req.json();
+    text = body.text;
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body", bets: [] },
+      { status: 400 }
+    );
+  }
 
   if (!text || typeof text !== "string" || text.trim().length === 0) {
     return NextResponse.json(
-      { error: "Missing text" },
+      { error: "Missing text", bets: [] },
       { status: 400 }
     );
+  }
+
+  // Truncate very long text to avoid API limits (~100k chars is plenty for any bet list)
+  const MAX_TEXT_LENGTH = 100_000;
+  if (text.length > MAX_TEXT_LENGTH) {
+    text = text.slice(0, MAX_TEXT_LENGTH);
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
+      { error: "ANTHROPIC_API_KEY not configured", bets: [] },
       { status: 500 }
     );
   }
@@ -152,10 +167,22 @@ ${text}`,
 
     const parsed = extractBetsJson(textBlock.text);
     return NextResponse.json(parsed);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Parse text error:", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to parse bet text";
+    // Surface specific API errors to the client
+    const isOverloaded =
+      message.includes("overloaded") || message.includes("529");
+    const isRateLimit =
+      message.includes("rate") || message.includes("429");
+    const userMessage = isOverloaded
+      ? "AI service is temporarily overloaded. Please try again in a moment."
+      : isRateLimit
+      ? "Rate limited — please wait a few seconds and try again."
+      : "Failed to parse bet text. Try pasting a smaller amount.";
     return NextResponse.json(
-      { error: "Failed to parse bet text", bets: [] },
+      { error: userMessage, bets: [] },
       { status: 500 }
     );
   }

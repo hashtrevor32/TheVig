@@ -181,7 +181,17 @@ export async function createBet(data: {
   let parsedPlacedAt: Date | undefined;
   if (data.placedAt) {
     const d = new Date(data.placedAt);
-    if (!isNaN(d.getTime())) parsedPlacedAt = d;
+    if (!isNaN(d.getTime())) {
+      // Correct wrong year — AI often parses old year from bet slips
+      const week = await prisma.week.findUnique({
+        where: { id: data.weekId },
+        select: { startAt: true },
+      });
+      if (week && d.getFullYear() !== week.startAt.getFullYear()) {
+        d.setFullYear(week.startAt.getFullYear());
+      }
+      parsedPlacedAt = d;
+    }
   }
 
   await prisma.bet.create({
@@ -432,6 +442,13 @@ export async function createBulkBets(data: {
   // For FP bets from scans, don't block on insufficient balance — the bet was already placed.
   // Just deduct what we can after creation.
 
+  // Fetch week dates so we can correct wrong years on AI-parsed placedAt
+  const week = await prisma.week.findUnique({
+    where: { id: data.weekId },
+    select: { startAt: true, endAt: true },
+  });
+  const weekYear = week ? week.startAt.getFullYear() : new Date().getFullYear();
+
   const now = new Date();
 
   await prisma.$transaction(
@@ -440,7 +457,14 @@ export async function createBulkBets(data: {
       let parsedPlacedAt: Date | undefined;
       if (bet.placedAt) {
         const d = new Date(bet.placedAt);
-        if (!isNaN(d.getTime())) parsedPlacedAt = d;
+        if (!isNaN(d.getTime())) {
+          // AI often parses the year wrong from bet slips (e.g. 2025 instead of 2026).
+          // If the parsed year doesn't match the week's year, correct it.
+          if (d.getFullYear() !== weekYear) {
+            d.setFullYear(weekYear);
+          }
+          parsedPlacedAt = d;
+        }
       }
 
       // If the bet has a settled result (from Result column on slip), create as SETTLED

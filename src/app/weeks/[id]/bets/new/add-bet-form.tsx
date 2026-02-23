@@ -214,7 +214,16 @@ export function AddBetForm({
         body: JSON.stringify({ image: base64, mediaType }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 504
+            ? "Request timed out — try a smaller image."
+            : "Server error — please try again."
+        );
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to parse");
@@ -264,7 +273,16 @@ export function AddBetForm({
         body: JSON.stringify({ text: pasteText }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 504
+            ? "Request timed out — try pasting fewer bets at a time."
+            : "Server error — try pasting fewer bets at a time."
+        );
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to parse text");
