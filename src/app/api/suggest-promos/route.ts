@@ -112,6 +112,7 @@ GENERAL RULES:
 - windowEnd must be end of last day (23:59:59), NOT midnight
 - For "sides" promos, use betType "moneyline,spread" (comma-separated)
 - capUnits MAXIMUM is 500 on ANY promo — this is a hard cap
+- NEVER suggest promos for exhibitions, spring training, preseason, All-Star games, or Pro Bowl. Only regular season and postseason games.
 
 Sport values: "golf", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "ufc", "college-football", "college-basketball", "f1", "nascar"
 BetType values: "outright", "matchup", "round-leader", "top-finish", "spread", "moneyline", "total", "3-ball". Comma-separate for multiple (e.g. "moneyline,spread"). NEVER use "parlay", "live", or "prop".

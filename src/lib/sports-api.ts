@@ -42,16 +42,50 @@ function formatDateRange(start: Date, end: Date): string {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
+// Exhibition / preseason keywords to filter out
+const EXCLUDED_EVENT_KEYWORDS = [
+  "exhibition",
+  "spring training",
+  "preseason",
+  "all-star",
+  "all star",
+  "pro bowl",
+  "grapefruit league",
+  "cactus league",
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseEspnEvents(data: any, config: LeagueConfig): SportEvent[] {
   if (!data?.events || !Array.isArray(data.events)) return [];
 
+  // Check if the league/season is preseason or off-season
+  const seasonType = data?.season?.type;
+  // ESPN season types: 1=preseason, 2=regular, 3=postseason, 4=off-season
+  if (seasonType === 1 || seasonType === 4) return [];
+
   return data.events
-    .filter((event: { status?: { type?: { name?: string } } }) => {
-      // Include scheduled, in-progress, and not-yet-started events
-      const statusName = event.status?.type?.name || "";
-      return statusName !== "STATUS_FINAL" && statusName !== "STATUS_CANCELED";
-    })
+    .filter(
+      (event: {
+        status?: { type?: { name?: string } };
+        name?: string;
+        season?: { type?: number };
+      }) => {
+        // Exclude finished/canceled
+        const statusName = event.status?.type?.name || "";
+        if (statusName === "STATUS_FINAL" || statusName === "STATUS_CANCELED")
+          return false;
+
+        // Exclude preseason events at the event level
+        if (event.season?.type === 1) return false;
+
+        // Exclude by keyword in event name
+        const nameLower = (event.name || "").toLowerCase();
+        if (EXCLUDED_EVENT_KEYWORDS.some((kw) => nameLower.includes(kw)))
+          return false;
+
+        return true;
+      }
+    )
     .map((event: { name?: string; shortName?: string; date?: string }) => ({
       sport: config.sport,
       league: config.leagueLabel,
