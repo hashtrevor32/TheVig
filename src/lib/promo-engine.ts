@@ -61,7 +61,7 @@ export type PromoMemberResult = {
   memberName: string;
   eligibleBetsCount: number;
   eligibleHandleUnits: number;
-  eligibleLosingStake: number;
+  eligibleNetLoss: number; // net loss on eligible settled bets (0 if net positive)
   qualified: boolean;
   disqualified: boolean;
   disqualifyReason?: string;
@@ -111,9 +111,14 @@ export async function computePromoResults(
       0
     );
 
-    const eligibleLosingStake = eligibleBets
-      .filter((b) => b.result === "LOSS")
-      .reduce((s, b) => s + b.stakeCashUnits, 0);
+    // Net P&L on eligible settled bets: payout - stake (negative = net loss)
+    const settledEligible = eligibleBets.filter((b) => b.status === "SETTLED");
+    const eligibleNetPL = settledEligible.reduce(
+      (s, b) => s + ((b.payoutCashUnits ?? 0) - b.stakeCashUnits),
+      0
+    );
+    // Net loss is the absolute value when P&L is negative
+    const eligibleNetLoss = eligibleNetPL < 0 ? Math.abs(eligibleNetPL) : 0;
 
     // Both-sides check
     let disqualified = false;
@@ -138,12 +143,12 @@ export async function computePromoResults(
     const qualified =
       !disqualified &&
       eligibleHandleUnits >= rule.minHandleUnits &&
-      eligibleLosingStake > 0;
+      eligibleNetLoss > 0;
 
     const projectedAward = qualified
       ? Math.min(
           rule.capUnits,
-          Math.floor((eligibleLosingStake * rule.percentBack) / 100)
+          Math.floor((eligibleNetLoss * rule.percentBack) / 100)
         )
       : 0;
 
@@ -157,7 +162,7 @@ export async function computePromoResults(
       memberName: wm.member.name,
       eligibleBetsCount: eligibleBets.length,
       eligibleHandleUnits,
-      eligibleLosingStake,
+      eligibleNetLoss,
       qualified,
       disqualified,
       disqualifyReason,
@@ -192,7 +197,7 @@ export async function generatePromoAwards(weekId: string) {
               source: "PROMO",
               amountUnits: r.projectedAward,
               promoId: promo.id,
-              notes: `${promo.name}: ${r.eligibleLosingStake} losing units × ${(promo.ruleJson as unknown as LossRebateRule).percentBack}%`,
+              notes: `${promo.name}: ${r.eligibleNetLoss} net loss × ${(promo.ruleJson as unknown as LossRebateRule).percentBack}%`,
             },
           });
         }

@@ -67,19 +67,23 @@ export default async function MemberDetailPage({
       (s, b) => s + b.stakeCashUnits,
       0
     );
-    const eligibleLosingStake = eligibleBets
-      .filter((b) => b.result === "LOSS")
-      .reduce((s, b) => s + b.stakeCashUnits, 0);
+    // Net P&L on eligible settled bets: payout - stake (negative = net loss)
+    const settledEligible = eligibleBets.filter((b) => b.status === "SETTLED");
+    const eligibleNetPL = settledEligible.reduce(
+      (s, b) => s + ((b.payoutCashUnits ?? 0) - b.stakeCashUnits),
+      0
+    );
+    const eligibleNetLoss = eligibleNetPL < 0 ? Math.abs(eligibleNetPL) : 0;
     const handleProgress =
       rule.minHandleUnits > 0
         ? Math.min(100, (eligibleHandle / rule.minHandleUnits) * 100)
         : 100;
-    const qualified = handleProgress >= 100 && eligibleLosingStake > 0;
+    const qualified = handleProgress >= 100 && eligibleNetLoss > 0;
 
     const projectedAward = qualified
       ? Math.min(
           rule.capUnits,
-          Math.floor((eligibleLosingStake * rule.percentBack) / 100)
+          Math.floor((eligibleNetLoss * rule.percentBack) / 100)
         )
       : 0;
 
@@ -93,7 +97,7 @@ export default async function MemberDetailPage({
       handleProgress,
       qualified,
       eligibleBetsCount: eligibleBets.length,
-      eligibleLosingStake,
+      eligibleNetLoss,
       projectedAward,
     };
   });
@@ -270,9 +274,9 @@ export default async function MemberDetailPage({
                 {/* Award details */}
                 <div className="flex gap-4 text-xs text-gray-500">
                   <span>{pp.percentBack}% back</span>
-                  {pp.eligibleLosingStake > 0 && (
+                  {pp.eligibleNetLoss > 0 && (
                     <span>
-                      Losing: {pp.eligibleLosingStake} units
+                      Net loss: {pp.eligibleNetLoss} units
                     </span>
                   )}
                   {pp.qualified && pp.projectedAward > 0 && (

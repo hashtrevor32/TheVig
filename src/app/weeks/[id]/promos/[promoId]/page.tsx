@@ -139,14 +139,14 @@ export default async function PromoProgressPage({
             </div>
 
             {/* Details */}
-            {(r.qualified || r.eligibleLosingStake > 0) && (
+            {(r.qualified || r.eligibleNetLoss > 0) && (
               <div className="flex gap-4 text-xs text-gray-500">
-                <span>Losing stake: {r.eligibleLosingStake} units</span>
+                <span>Net loss: {r.eligibleNetLoss} units</span>
                 {r.qualified && (
                   <span className="text-blue-400">
-                    {r.eligibleLosingStake} &times; {rule.percentBack}% ={" "}
-                    {Math.floor((r.eligibleLosingStake * rule.percentBack) / 100)} units
-                    {Math.floor((r.eligibleLosingStake * rule.percentBack) / 100) >
+                    {r.eligibleNetLoss} &times; {rule.percentBack}% ={" "}
+                    {Math.floor((r.eligibleNetLoss * rule.percentBack) / 100)} units
+                    {Math.floor((r.eligibleNetLoss * rule.percentBack) / 100) >
                     rule.capUnits
                       ? ` (capped at ${rule.capUnits})`
                       : ""}
