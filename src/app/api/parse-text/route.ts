@@ -162,10 +162,27 @@ ${text}`,
 
     const textBlock = response.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
-      return NextResponse.json({ bets: [] });
+      console.error("Parse text: no text block in response, stop_reason:", response.stop_reason);
+      return NextResponse.json({ bets: [], debug: "No text in AI response" });
     }
 
+    console.log("Parse text: stop_reason =", response.stop_reason, "response length =", textBlock.text.length, "chars");
+
     const parsed = extractBetsJson(textBlock.text);
+
+    // If we got 0 bets but the response was truncated, let the client know
+    if (parsed.bets.length === 0 && response.stop_reason === "max_tokens") {
+      return NextResponse.json(
+        { error: "AI response was too long and got cut off. Try pasting fewer bets.", bets: [] },
+        { status: 500 }
+      );
+    }
+
+    // If we got 0 bets and the AI returned text, log it for debugging
+    if (parsed.bets.length === 0 && textBlock.text.length > 0) {
+      console.error("Parse text: AI returned text but no bets extracted. First 500 chars:", textBlock.text.slice(0, 500));
+    }
+
     return NextResponse.json(parsed);
   } catch (err: unknown) {
     console.error("Parse text error:", err);
@@ -176,11 +193,15 @@ ${text}`,
       message.includes("overloaded") || message.includes("529");
     const isRateLimit =
       message.includes("rate") || message.includes("429");
+    const isTimeout =
+      message.includes("timeout") || message.includes("ETIMEDOUT") || message.includes("ECONNRESET");
     const userMessage = isOverloaded
       ? "AI service is temporarily overloaded. Please try again in a moment."
       : isRateLimit
       ? "Rate limited — please wait a few seconds and try again."
-      : "Failed to parse bet text. Try pasting a smaller amount.";
+      : isTimeout
+      ? "AI request timed out. Try pasting fewer bets at a time."
+      : `Failed to parse bet text: ${message}`;
     return NextResponse.json(
       { error: userMessage, bets: [] },
       { status: 500 }

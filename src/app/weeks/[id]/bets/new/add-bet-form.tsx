@@ -318,15 +318,18 @@ export function AddBetForm({
     setBulkSuccess(null);
 
     try {
-      // Split large text into ~30k char chunks to avoid timeouts
-      const CHUNK_SIZE = 30_000;
+      // Split large text into ~15k char chunks — balances speed vs reliability
+      const CHUNK_SIZE = 15_000;
       const chunks = splitTextIntoChunks(pasteText.trim(), CHUNK_SIZE);
 
       let allBets: ParsedBet[] = [];
 
       for (let i = 0; i < chunks.length; i++) {
         if (chunks.length > 1) {
-          setScanError(`Parsing chunk ${i + 1} of ${chunks.length}...`);
+          setScanError(
+            `Parsing batch ${i + 1} of ${chunks.length}...` +
+            (allBets.length > 0 ? ` (${allBets.length} bets found so far)` : "")
+          );
         }
         const chunkBets = await parseTextChunk(chunks[i]);
         allBets = [...allBets, ...chunkBets];
