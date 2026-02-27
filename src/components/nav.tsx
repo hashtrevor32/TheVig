@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Trophy, Medal, Users, Settings, Shield } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Trophy, Medal, Users, Settings, Shield } from "lucide-react";
 
 const baseNavItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/ev", label: "EV Finder", icon: TrendingUp },
   { href: "/weeks", label: "Bets", icon: Trophy },
   { href: "/leaderboard", label: "Leaders", icon: Medal },
   { href: "/members", label: "Members", icon: Users },
