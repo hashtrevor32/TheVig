@@ -97,6 +97,10 @@ export const BOOK_DISPLAY_NAMES: Record<string, string> = {
 
 export const SHARP_BOOK = "pinnacle";
 
+// User's state for sportsbook deep links (BetMGM uses {state} placeholder)
+export const USER_STATE = "nc";
+
+
 export function isUserBook(bookKey: string): boolean {
   return (USER_BOOKS as readonly string[]).includes(bookKey);
 }
@@ -125,6 +129,22 @@ export function getCacheInfo(key: string) {
 
 export function getCreditStats() {
   return { used: totalCreditsUsed, remaining: lastCreditsRemaining };
+}
+
+/** Replace {state} placeholders in sportsbook deep links */
+function fixLinks(events: OddsApiEvent[]): OddsApiEvent[] {
+  for (const event of events) {
+    for (const book of event.bookmakers) {
+      if (book.link) book.link = book.link.replace("{state}", USER_STATE);
+      for (const market of book.markets) {
+        if (market.link) market.link = market.link.replace("{state}", USER_STATE);
+        for (const outcome of market.outcomes) {
+          if (outcome.link) outcome.link = outcome.link.replace("{state}", USER_STATE);
+        }
+      }
+    }
+  }
+  return events;
 }
 
 // ── API fetching ────────────────────────────────────────────────────
@@ -173,8 +193,8 @@ export async function fetchOddsForSport(
 
   // Filter to only upcoming events (not already started)
   const now = new Date();
-  const upcoming = data.filter(
-    (e) => new Date(e.commence_time) > now
+  const upcoming = fixLinks(
+    data.filter((e) => new Date(e.commence_time) > now)
   );
 
   // Cache
