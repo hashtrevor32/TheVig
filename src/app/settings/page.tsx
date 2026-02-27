@@ -10,22 +10,23 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Settings</h2>
+      <h2 className="text-3xl font-bold text-white tracking-tight">Settings</h2>
 
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-4">
+      <div className="bg-white/[0.03] rounded-2xl border border-white/[0.06] p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-gray-400 text-sm">Operator</span>
+          <span className="text-[#a1a1a6] text-sm">Operator</span>
           <span className="text-white text-sm font-medium">
             {session.operatorName}
             {session.isAdmin && (
-              <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-blue-500/10 text-blue-400">
+              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-[#0a84ff]/10 text-[#0a84ff]">
                 admin
               </span>
             )}
           </span>
         </div>
+        <div className="border-t border-white/[0.06]" />
         <div className="flex items-center justify-between">
-          <span className="text-gray-400 text-sm">Group</span>
+          <span className="text-[#a1a1a6] text-sm">Group</span>
           <span className="text-white text-sm font-medium">
             {group?.name ?? "Unknown"}
           </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BottomNav, Header } from "./nav";
+import { DesktopHeader, MobileHeader, MobileBottomNav } from "./nav";
 
 export function AppShell({
   children,
@@ -22,13 +22,13 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen">
-      <BottomNav isAdmin={isAdmin} />
-      <Header groupName={groupName} operatorName={operatorName} />
+    <div className="min-h-screen bg-black">
+      <DesktopHeader isAdmin={isAdmin} />
+      <MobileHeader groupName={groupName} operatorName={operatorName} />
+      <MobileBottomNav isAdmin={isAdmin} />
 
-      {/* Main content area */}
-      <main className="md:ml-56 pb-20 md:pb-0">
-        <div className="max-w-4xl mx-auto px-4 py-4 md:py-6">
+      <main className="md:pt-16 pb-28 md:pb-8">
+        <div className="max-w-5xl mx-auto px-5 py-6 md:px-8 md:py-8">
           {children}
         </div>
       </main>

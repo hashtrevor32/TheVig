@@ -111,7 +111,7 @@ const oddsCache = new Map<
   string,
   { data: OddsApiEvent[]; timestamp: number; creditsUsed: number }
 >();
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 let totalCreditsUsed = 0;
 let lastCreditsRemaining: number | null = null;

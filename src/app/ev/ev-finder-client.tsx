@@ -9,7 +9,6 @@ import {
   Triangle,
   ChevronDown,
   ChevronUp,
-  Clock,
 } from "lucide-react";
 import type { EVBet, ArbOpportunity, GameOddsDetail } from "@/lib/ev-engine";
 import { SPORT_MAP, USER_BOOKS, BOOK_DISPLAY_NAMES } from "@/lib/odds-api";
@@ -34,6 +33,9 @@ export function EVFinderClient() {
 
   // Filters
   const [minEV, setMinEV] = useState(0);
+
+  // Auto-refresh
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Line shopping
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
@@ -70,8 +72,7 @@ export function EVFinderClient() {
         setLastUpdated(data.lastUpdated || "");
         if (data.credits) setCredits(data.credits);
 
-        // Start cooldown
-        setCooldown(60);
+        setCooldown(30);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load odds");
       } finally {
@@ -86,6 +87,15 @@ export function EVFinderClient() {
     fetchData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSport, activeTab]);
+
+  // Auto-refresh every 2 minutes
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchData]);
 
   // Cooldown timer
   useEffect(() => {
@@ -154,12 +164,10 @@ export function EVFinderClient() {
     return `${mins} min ago`;
   }
 
-  // Format odds display
   function fmtOdds(odds: number): string {
     return odds > 0 ? `+${odds}` : `${odds}`;
   }
 
-  // Format time
   function fmtTime(iso: string): string {
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", {
@@ -171,11 +179,10 @@ export function EVFinderClient() {
     });
   }
 
-  // EV badge color
   function evColor(ev: number): string {
-    if (ev >= 5) return "bg-green-500/15 text-green-400 border-green-500/30";
-    if (ev >= 2) return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
-    return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    if (ev >= 5) return "bg-[#30d158]/15 text-[#30d158]";
+    if (ev >= 2) return "bg-[#ffd60a]/15 text-[#ffd60a]";
+    return "bg-[#0a84ff]/15 text-[#0a84ff]";
   }
 
   const sports = [
@@ -187,51 +194,62 @@ export function EVFinderClient() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <TrendingUp size={24} className="text-green-400" />
+          <h2 className="text-3xl font-bold text-white tracking-tight">
             EV Finder
           </h2>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-3 mt-2">
             {lastUpdated && (
-              <span className="text-gray-500 text-xs flex items-center gap-1">
-                <Clock size={12} />
+              <span className="text-[#6e6e73] text-xs flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse" />
                 {timeAgo(lastUpdated)}
               </span>
             )}
             {credits.remaining !== null && (
-              <span className="text-gray-600 text-xs">
-                {credits.remaining} credits left
+              <span className="text-[#48484a] text-xs">
+                {credits.remaining} credits
               </span>
             )}
-            <span className="text-gray-600 text-xs">
+            <span className="text-[#48484a] text-xs">
               {totalEvents} events
             </span>
           </div>
         </div>
-        <button
-          onClick={() => fetchData()}
-          disabled={loading || cooldown > 0}
-          className="p-2.5 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors relative"
-          title={cooldown > 0 ? `Wait ${cooldown}s` : "Refresh odds"}
-        >
-          <RefreshCw
-            size={18}
-            className={loading ? "animate-spin" : ""}
-          />
-          {cooldown > 0 && (
-            <span className="absolute -bottom-1 -right-1 text-[10px] bg-gray-700 text-gray-400 rounded px-1">
-              {cooldown}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`px-3 py-2 rounded-xl text-xs font-medium ${
+              autoRefresh
+                ? "bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/20"
+                : "bg-white/[0.05] text-[#6e6e73] border border-white/[0.06]"
+            }`}
+          >
+            {autoRefresh ? "Live" : "Paused"}
+          </button>
+          <button
+            onClick={() => fetchData()}
+            disabled={loading || cooldown > 0}
+            className="p-2.5 bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 text-white rounded-xl border border-white/[0.06] hover:border-white/[0.1] relative"
+            title={cooldown > 0 ? `Wait ${cooldown}s` : "Refresh odds"}
+          >
+            <RefreshCw
+              size={18}
+              className={loading ? "animate-spin" : ""}
+            />
+            {cooldown > 0 && (
+              <span className="absolute -bottom-1 -right-1 text-[10px] bg-white/[0.1] text-[#a1a1a6] rounded-full px-1.5 font-mono">
+                {cooldown}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
+      {/* Tabs — Segmented Control */}
+      <div className="flex gap-0.5 bg-white/[0.05] rounded-2xl p-1 border border-white/[0.06]">
         {(
           [
             { key: "ev" as Tab, label: "EV Finder" },
@@ -242,15 +260,15 @@ export function EVFinderClient() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+            className={`flex-1 py-2.5 text-sm font-medium rounded-xl ${
               activeTab === tab.key
-                ? "bg-gray-800 text-white"
-                : "text-gray-500 hover:text-gray-300"
+                ? "bg-white/[0.1] text-white shadow-sm shadow-black/20"
+                : "text-[#6e6e73] hover:text-[#a1a1a6]"
             }`}
           >
             {tab.label}
             {tab.key === "arbs" && filteredArbs.length > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">
+              <span className="ml-1.5 px-2 py-0.5 text-[11px] font-bold bg-[#ffd60a]/15 text-[#ffd60a] rounded-full">
                 {filteredArbs.length}
               </span>
             )}
@@ -259,15 +277,15 @@ export function EVFinderClient() {
       </div>
 
       {/* Sport Filter Pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {sports.map((s) => (
           <button
             key={s.key}
             onClick={() => setSelectedSport(s.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+            className={`px-4 py-2 text-xs font-medium rounded-full whitespace-nowrap ${
               selectedSport === s.key
-                ? "bg-blue-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:text-white"
+                ? "bg-[#0a84ff] text-white shadow-lg shadow-blue-500/25"
+                : "bg-white/[0.05] text-[#a1a1a6] hover:bg-white/[0.1] hover:text-white border border-white/[0.06]"
             }`}
           >
             {s.label}
@@ -276,33 +294,33 @@ export function EVFinderClient() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 text-xs">
-        {activeTab === "ev" && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500">Min EV:</span>
+      {activeTab === "ev" && (
+        <div className="flex items-center gap-2">
+          <span className="text-[#6e6e73] text-xs font-medium">Min EV</span>
+          <div className="flex gap-0.5 bg-white/[0.05] rounded-full p-0.5 border border-white/[0.06]">
             {[0, 1, 2, 5].map((v) => (
               <button
                 key={v}
                 onClick={() => setMinEV(v)}
-                className={`px-2 py-1 rounded transition-colors ${
+                className={`px-3 py-1 rounded-full text-xs font-medium ${
                   minEV === v
-                    ? "bg-gray-700 text-white"
-                    : "text-gray-500 hover:text-gray-300"
+                    ? "bg-white/[0.15] text-white"
+                    : "text-[#6e6e73] hover:text-[#a1a1a6]"
                 }`}
               >
                 {v}%
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="bg-[#ff453a]/[0.08] border border-[#ff453a]/15 rounded-2xl p-4">
+          <p className="text-[#ff453a] text-sm font-medium">{error}</p>
           {error.includes("ODDS_API_KEY") && (
-            <p className="text-red-400/70 text-xs mt-1">
+            <p className="text-[#ff453a]/60 text-xs mt-1">
               Add your API key from the-odds-api.com as ODDS_API_KEY in
               Vercel env vars.
             </p>
@@ -312,20 +330,22 @@ export function EVFinderClient() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={24} className="animate-spin text-gray-500" />
-          <span className="ml-2 text-gray-500 text-sm">Loading odds...</span>
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <Loader2 size={28} className="animate-spin text-[#0a84ff]" />
+          <span className="text-[#6e6e73] text-sm">Scanning odds...</span>
         </div>
       )}
 
       {/* EV Finder Tab */}
       {!loading && activeTab === "ev" && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {filteredBets.length === 0 ? (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-              <TrendingUp size={32} className="mx-auto text-gray-700 mb-2" />
-              <p className="text-gray-500 text-sm">No +EV bets found</p>
-              <p className="text-gray-600 text-xs mt-1">
+            <div className="bg-white/[0.02] rounded-2xl border border-white/[0.06] p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
+                <TrendingUp size={24} className="text-[#48484a]" />
+              </div>
+              <p className="text-[#a1a1a6] text-sm font-medium">No +EV bets found</p>
+              <p className="text-[#48484a] text-xs mt-1.5 max-w-xs mx-auto">
                 {evBets.length > 0
                   ? "Try adjusting your filters"
                   : "Check back closer to game time when lines are sharper"}
@@ -333,7 +353,7 @@ export function EVFinderClient() {
             </div>
           ) : (
             <>
-              <p className="text-gray-500 text-xs">
+              <p className="text-[#6e6e73] text-xs">
                 {filteredBets.length} +EV bet
                 {filteredBets.length !== 1 ? "s" : ""} found
               </p>
@@ -365,21 +385,23 @@ export function EVFinderClient() {
 
       {/* Arb Finder Tab */}
       {!loading && activeTab === "arbs" && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {filteredArbs.length === 0 ? (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-              <Triangle size={32} className="mx-auto text-gray-700 mb-2" />
-              <p className="text-gray-500 text-sm">
+            <div className="bg-white/[0.02] rounded-2xl border border-white/[0.06] p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
+                <Triangle size={24} className="text-[#48484a]" />
+              </div>
+              <p className="text-[#a1a1a6] text-sm font-medium">
                 No arbitrage opportunities found
               </p>
-              <p className="text-gray-600 text-xs mt-1">
+              <p className="text-[#48484a] text-xs mt-1.5 max-w-xs mx-auto">
                 Arbs are rare — they appear when books disagree on odds
                 enough to guarantee profit.
               </p>
             </div>
           ) : (
             <>
-              <p className="text-gray-500 text-xs">
+              <p className="text-[#6e6e73] text-xs">
                 {filteredArbs.length} arb
                 {filteredArbs.length !== 1 ? "s" : ""} found
               </p>
@@ -393,14 +415,13 @@ export function EVFinderClient() {
 
       {/* Line Shopping Tab */}
       {!loading && activeTab === "lines" && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {filteredBets.length === 0 ? (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-              <p className="text-gray-500 text-sm">No events loaded</p>
+            <div className="bg-white/[0.02] rounded-2xl border border-white/[0.06] p-12 text-center">
+              <p className="text-[#a1a1a6] text-sm font-medium">No events loaded</p>
             </div>
           ) : (
             <>
-              {/* Deduplicate events */}
               {Array.from(
                 new Map(
                   filteredBets.map((b) => [b.eventId, b])
@@ -411,21 +432,21 @@ export function EVFinderClient() {
                     onClick={() =>
                       handleExpandGame(bet.eventId, bet.sport)
                     }
-                    className="w-full bg-gray-900 rounded-xl border border-gray-800 p-4 text-left hover:border-gray-700 transition-colors"
+                    className="w-full bg-white/[0.03] rounded-2xl border border-white/[0.06] p-5 text-left hover:bg-white/[0.05] hover:border-white/[0.1]"
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-white text-sm font-medium">
+                        <p className="text-white text-[15px] font-semibold">
                           {bet.awayTeam} @ {bet.homeTeam}
                         </p>
-                        <p className="text-gray-500 text-xs mt-0.5">
+                        <p className="text-[#6e6e73] text-xs mt-1">
                           {bet.sportDisplay} &middot; {fmtTime(bet.commenceTime)}
                         </p>
                       </div>
                       {expandedEvent === bet.eventId ? (
-                        <ChevronUp size={16} className="text-gray-500" />
+                        <ChevronUp size={16} className="text-[#6e6e73]" />
                       ) : (
-                        <ChevronDown size={16} className="text-gray-500" />
+                        <ChevronDown size={16} className="text-[#6e6e73]" />
                       )}
                     </div>
                   </button>
@@ -464,44 +485,44 @@ function EVBetCard({
   onExpand: () => void;
 }) {
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl border border-white/[0.06] hover:border-white/[0.1] p-5 space-y-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {/* EV Badge + Book */}
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2.5 mb-2">
             <span
-              className={`px-2 py-0.5 text-xs font-bold rounded border ${evColor(bet.evPercent)}`}
+              className={`px-2.5 py-1 text-xs font-bold rounded-full ${evColor(bet.evPercent)}`}
             >
               +{bet.evPercent.toFixed(1)}% EV
             </span>
-            <span className="text-blue-400 text-xs font-medium">
+            <span className="text-[#0a84ff] text-xs font-medium">
               {bet.bookName}
             </span>
           </div>
 
           {/* Outcome + Odds */}
-          <div className="flex items-baseline gap-2">
-            <p className="text-white font-semibold text-sm">
+          <div className="flex items-baseline gap-2.5">
+            <p className="text-white font-semibold text-[15px]">
               {bet.outcomeName}
               {bet.point !== undefined && (
-                <span className="text-gray-400 ml-1">
+                <span className="text-[#a1a1a6] ml-1.5">
                   {bet.point > 0 ? `+${bet.point}` : bet.point}
                 </span>
               )}
             </p>
-            <span className="text-green-400 font-mono text-sm font-bold">
+            <span className="text-[#30d158] font-mono text-sm font-bold">
               {fmtOdds(bet.bookOdds)}
             </span>
           </div>
 
           {/* Event info */}
-          <p className="text-gray-500 text-xs mt-1">
+          <p className="text-[#6e6e73] text-xs mt-1.5">
             {bet.awayTeam} @ {bet.homeTeam} &middot;{" "}
             {bet.sportDisplay} &middot; {fmtTime(bet.commenceTime)}
           </p>
 
           {/* Sharp line comparison */}
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-[#48484a] text-xs mt-1.5">
             True prob: {(bet.noVigProb * 100).toFixed(1)}% &middot;
             Pinnacle: {fmtOdds(bet.pinnacleOdds)}
             {bet.bestOddsBook !== bet.bookKey && (
@@ -514,25 +535,25 @@ function EVBetCard({
         </div>
 
         {/* Action buttons */}
-        <div className="flex flex-col gap-1.5 shrink-0">
+        <div className="flex flex-col gap-2 shrink-0">
           {bet.bookLink ? (
             <a
               href={bet.bookLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+              className="px-4 py-2.5 bg-[#30d158] hover:bg-[#34d65c] text-black text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-lg shadow-green-500/20"
             >
               Bet
               <ExternalLink size={12} />
             </a>
           ) : (
-            <span className="px-3 py-2 bg-gray-800 text-gray-500 text-xs rounded-lg">
+            <span className="px-4 py-2.5 bg-white/[0.05] text-[#6e6e73] text-xs font-medium rounded-xl border border-white/[0.06]">
               Manual
             </span>
           )}
           <button
             onClick={onExpand}
-            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs rounded-lg transition-colors"
+            className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-[#a1a1a6] hover:text-white text-xs font-medium rounded-xl border border-white/[0.06] hover:border-white/[0.1]"
           >
             {expanded ? "Hide" : "Lines"}
           </button>
@@ -554,15 +575,15 @@ function ArbCard({
   fmtTime: (s: string) => string;
 }) {
   return (
-    <div className="bg-gradient-to-r from-yellow-500/5 to-amber-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
+    <div className="bg-gradient-to-br from-[#ffd60a]/[0.04] to-amber-500/[0.02] rounded-2xl border border-[#ffd60a]/15 p-5 space-y-4 hover:border-[#ffd60a]/25">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 text-xs font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 rounded">
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="px-2.5 py-1 text-xs font-bold bg-[#ffd60a]/15 text-[#ffd60a] rounded-full">
               +{arb.arbPercent.toFixed(2)}% Profit
             </span>
-            <span className="text-gray-500 text-xs uppercase">
+            <span className="text-[#6e6e73] text-xs uppercase tracking-wider font-medium">
               {arb.market === "h2h"
                 ? "ML"
                 : arb.market === "spreads"
@@ -570,10 +591,10 @@ function ArbCard({
                   : "Total"}
             </span>
           </div>
-          <p className="text-white text-sm font-medium">
+          <p className="text-white text-[15px] font-semibold">
             {arb.awayTeam} @ {arb.homeTeam}
           </p>
-          <p className="text-gray-500 text-xs mt-0.5">
+          <p className="text-[#6e6e73] text-xs mt-1">
             {arb.sportDisplay} &middot; {fmtTime(arb.commenceTime)}
           </p>
         </div>
@@ -588,28 +609,28 @@ function ArbCard({
           return (
             <div
               key={i}
-              className={`flex items-center justify-between p-2.5 rounded-lg ${
+              className={`flex items-center justify-between p-3.5 rounded-xl ${
                 isUser
-                  ? "bg-blue-500/10 border border-blue-500/20"
-                  : "bg-gray-900/50 border border-gray-800"
+                  ? "bg-[#0a84ff]/[0.08] border border-[#0a84ff]/15"
+                  : "bg-white/[0.03] border border-white/[0.06]"
               }`}
             >
               <div>
-                <p className="text-white text-sm">
+                <p className="text-white text-sm font-medium">
                   {leg.outcomeName}
                   {leg.point !== undefined && (
-                    <span className="text-gray-400 ml-1">
+                    <span className="text-[#a1a1a6] ml-1.5">
                       {leg.point > 0 ? `+${leg.point}` : leg.point}
                     </span>
                   )}
                 </p>
-                <p className="text-gray-500 text-xs">
+                <p className="text-[#6e6e73] text-xs mt-0.5">
                   {BOOK_DISPLAY_NAMES[leg.bookKey] || leg.bookName} &middot;
                   Stake: {leg.stakePercent.toFixed(1)}%
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-400 font-mono text-sm font-bold">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[#30d158] font-mono text-sm font-bold">
                   {fmtOdds(leg.odds)}
                 </span>
                 {leg.link && (
@@ -617,7 +638,7 @@ function ArbCard({
                     href={leg.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                    className="p-2 bg-[#30d158] hover:bg-[#34d65c] text-black rounded-lg shadow-lg shadow-green-500/20"
                   >
                     <ExternalLink size={12} />
                   </a>
@@ -644,9 +665,9 @@ function LineShoppingPanel({
 }) {
   if (loading) {
     return (
-      <div className="bg-gray-900/50 border-x border-b border-gray-800 rounded-b-xl p-4 flex items-center justify-center">
-        <Loader2 size={16} className="animate-spin text-gray-500" />
-        <span className="ml-2 text-gray-500 text-sm">Loading lines...</span>
+      <div className="bg-white/[0.02] border-x border-b border-white/[0.06] rounded-b-2xl p-5 flex items-center justify-center">
+        <Loader2 size={16} className="animate-spin text-[#6e6e73]" />
+        <span className="ml-2 text-[#6e6e73] text-sm">Loading lines...</span>
       </div>
     );
   }
@@ -660,24 +681,24 @@ function LineShoppingPanel({
   };
 
   return (
-    <div className="bg-gray-900/50 border-x border-b border-gray-800 rounded-b-xl p-3 space-y-4 -mt-1">
+    <div className="bg-white/[0.02] border-x border-b border-white/[0.06] rounded-b-2xl p-4 space-y-5 -mt-2">
       {detail.markets.map((market) => (
         <div key={market.key}>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+          <p className="text-xs font-semibold text-[#a1a1a6] uppercase tracking-wider mb-3">
             {marketLabels[market.key] || market.key}
           </p>
-          <div className="space-y-1.5">
+          <div className="space-y-3">
             {market.lines.map((line, li) => (
-              <div key={li} className="space-y-1">
-                <p className="text-white text-xs font-medium">
+              <div key={li} className="space-y-2">
+                <p className="text-white text-xs font-semibold">
                   {line.outcomeName}
                   {line.point !== undefined && (
-                    <span className="text-gray-400 ml-1">
+                    <span className="text-[#a1a1a6] ml-1.5">
                       {line.point > 0 ? `+${line.point}` : line.point}
                     </span>
                   )}
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {line.books
                     .filter((b) => b.isUserBook)
                     .sort((a, b) => b.odds - a.odds)
@@ -687,16 +708,14 @@ function LineShoppingPanel({
                         href={book.link || "#"}
                         target={book.link ? "_blank" : undefined}
                         rel={book.link ? "noopener noreferrer" : undefined}
-                        className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
+                        className={`px-3 py-2 rounded-xl text-xs font-mono ${
                           book.isBest
-                            ? "bg-green-500/15 text-green-400 border border-green-500/30 font-bold"
-                            : book.isUserBook
-                              ? "bg-blue-500/10 text-blue-300 border border-blue-500/20"
-                              : "bg-gray-800 text-gray-400 border border-gray-700"
-                        } ${book.link ? "hover:opacity-80 cursor-pointer" : "cursor-default"}`}
+                            ? "bg-[#30d158]/10 text-[#30d158] border border-[#30d158]/20 font-bold shadow-sm shadow-green-500/10"
+                            : "bg-[#0a84ff]/[0.06] text-[#64b5f6] border border-[#0a84ff]/15"
+                        } ${book.link ? "hover:scale-[1.02] cursor-pointer" : "cursor-default"}`}
                         title={`${book.bookName}: ${fmtOdds(book.odds)}`}
                       >
-                        <span className="text-[10px] text-gray-500 block leading-tight">
+                        <span className="text-[10px] text-[#6e6e73] block leading-tight mb-0.5">
                           {book.bookName}
                         </span>
                         {fmtOdds(book.odds)}

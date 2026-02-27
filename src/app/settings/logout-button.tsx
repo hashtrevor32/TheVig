@@ -18,7 +18,7 @@ export function LogoutButton() {
     <button
       onClick={handleLogout}
       disabled={loading}
-      className="w-full py-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-colors border border-red-500/20"
+      className="w-full py-3.5 bg-[#ff453a]/10 hover:bg-[#ff453a]/15 text-[#ff453a] font-medium rounded-2xl border border-[#ff453a]/15"
     >
       {loading ? "Signing out..." : "Sign Out"}
     </button>

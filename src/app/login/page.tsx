@@ -23,7 +23,7 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        router.push("/");
+        router.push("/ev");
         router.refresh();
       } else {
         setError("Invalid credentials");
@@ -36,21 +36,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-black flex items-center justify-center px-5">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">TheVig</h1>
-          <p className="text-gray-400 mt-2">Betting Pool Tracker</p>
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-white tracking-tight">TheVig</h1>
+          <p className="text-[#6e6e73] mt-2">EV Finder & Odds Scanner</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white/[0.05] backdrop-blur-xl border border-white/[0.08] rounded-3xl p-8 space-y-5"
+        >
           <div>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Username"
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-3.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-white placeholder-[#6e6e73] focus:outline-none focus:ring-2 focus:ring-[#0a84ff]/50 focus:border-[#0a84ff]/50"
               autoFocus
               autoCapitalize="none"
               autoCorrect="off"
@@ -62,18 +65,18 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-3.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-white placeholder-[#6e6e73] focus:outline-none focus:ring-2 focus:ring-[#0a84ff]/50 focus:border-[#0a84ff]/50"
             />
           </div>
 
           {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
+            <p className="text-[#ff453a] text-sm text-center">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading || !name || !password}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors"
+            className="w-full py-3.5 bg-[#0a84ff] hover:bg-[#0a84ff]/90 disabled:bg-white/[0.05] disabled:text-[#48484a] text-white font-semibold rounded-xl"
           >
             {loading ? "..." : "Sign In"}
           </button>

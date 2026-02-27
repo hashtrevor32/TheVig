@@ -2,87 +2,49 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, TrendingUp, Trophy, Medal, Users, Settings, Shield } from "lucide-react";
+import { TrendingUp, Settings, Shield } from "lucide-react";
 
 const baseNavItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/ev", label: "EV Finder", icon: TrendingUp },
-  { href: "/weeks", label: "Bets", icon: Trophy },
-  { href: "/leaderboard", label: "Leaders", icon: Medal },
-  { href: "/members", label: "Members", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function BottomNav({ isAdmin }: { isAdmin: boolean }) {
+export function DesktopHeader({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const navItems = isAdmin
     ? [...baseNavItems, { href: "/admin", label: "Admin", icon: Shield }]
     : baseNavItems;
 
   return (
-    <>
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 md:hidden z-50">
-        <div className="flex justify-around items-center h-16">
+    <header className="hidden md:flex fixed top-0 left-0 right-0 h-16 z-50 bg-black/80 backdrop-blur-2xl border-b border-white/[0.06]">
+      <div className="max-w-5xl mx-auto w-full px-8 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-white tracking-tight">TheVig</h1>
+        <nav className="flex items-center gap-0.5 bg-white/[0.05] rounded-full p-1">
           {navItems.map((item) => {
-            const Icon = item.icon;
             const isActive =
               pathname === item.href ||
               (item.href !== "/" && pathname.startsWith(item.href));
-
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+                className={`px-4 py-1.5 rounded-full text-sm font-medium ${
                   isActive
-                    ? "text-blue-400"
-                    : "text-gray-500 hover:text-gray-300"
+                    ? "bg-white/[0.12] text-white"
+                    : "text-[#6e6e73] hover:text-white"
                 }`}
               >
-                <Icon size={20} />
-                <span className="text-xs">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:flex-col md:w-56 md:fixed md:inset-y-0 bg-gray-900 border-r border-gray-800">
-        <div className="px-4 py-5 border-b border-gray-800">
-          <h1 className="text-xl font-bold text-white">TheVig</h1>
-          <p className="text-xs text-gray-500 mt-1">Betting Pool Tracker</p>
-        </div>
-        <nav className="flex-1 px-2 py-4 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href));
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-gray-800 text-blue-400"
-                    : "text-gray-400 hover:text-white hover:bg-gray-800/50"
-                }`}
-              >
-                <Icon size={18} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
-      </aside>
-    </>
+      </div>
+    </header>
   );
 }
 
-export function Header({
+export function MobileHeader({
   groupName,
   operatorName,
 }: {
@@ -90,16 +52,53 @@ export function Header({
   operatorName: string;
 }) {
   return (
-    <header className="sticky top-0 z-40 bg-gray-900/80 backdrop-blur-sm border-b border-gray-800 md:hidden">
-      <div className="px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-white">TheVig</h1>
+    <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-2xl border-b border-white/[0.06] md:hidden">
+      <div className="px-5 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-white tracking-tight">TheVig</h1>
         <div className="text-right">
-          <span className="text-sm text-gray-400">{groupName}</span>
+          <span className="text-[#a1a1a6] text-sm">{groupName}</span>
           {operatorName && (
-            <p className="text-xs text-gray-500">{operatorName}</p>
+            <p className="text-[#6e6e73] text-xs">{operatorName}</p>
           )}
         </div>
       </div>
     </header>
+  );
+}
+
+export function MobileBottomNav({ isAdmin }: { isAdmin: boolean }) {
+  const pathname = usePathname();
+  const navItems = isAdmin
+    ? [...baseNavItems, { href: "/admin", label: "Admin", icon: Shield }]
+    : baseNavItems;
+
+  return (
+    <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/[0.1] backdrop-blur-2xl border border-white/[0.1] rounded-full px-2 py-1.5 z-50 md:hidden">
+      <div className="flex items-center gap-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(item.href));
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full ${
+                isActive
+                  ? "bg-white/[0.15] text-white"
+                  : "text-[#6e6e73] hover:text-white"
+              }`}
+            >
+              <Icon size={18} />
+              {isActive && (
+                <span className="text-xs font-medium">{item.label}</span>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

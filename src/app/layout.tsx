@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TheVig — Betting Pool Tracker",
-  description: "Weekly betting pool tracker for your friend group",
+  title: "TheVig — EV Finder & Odds Scanner",
+  description: "Find +EV bets, arbitrage opportunities, and shop lines across sportsbooks",
 };
 
 export default async function RootLayout({
@@ -37,7 +37,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-gray-100`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-[#f5f5f7]`}
       >
         <AppShell
           operatorName={session?.operatorName ?? ""}
