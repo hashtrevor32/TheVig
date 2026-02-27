@@ -6,7 +6,6 @@ import {
   Loader2,
   RefreshCw,
   ExternalLink,
-  Filter,
   Triangle,
   ChevronDown,
   ChevronUp,
@@ -34,7 +33,6 @@ export function EVFinderClient() {
   }>({ used: 0, remaining: null });
 
   // Filters
-  const [userBooksOnly, setUserBooksOnly] = useState(true);
   const [minEV, setMinEV] = useState(0);
 
   // Line shopping
@@ -128,27 +126,23 @@ export function EVFinderClient() {
     }
   }
 
-  // Filter EV bets
+  // Filter EV bets — only show user's books
   const filteredBets = useMemo(() => {
-    let filtered = evBets;
-    if (userBooksOnly) {
-      filtered = filtered.filter((b) => b.isUserBook);
-    }
+    let filtered = evBets.filter((b) => b.isUserBook);
     if (minEV > 0) {
       filtered = filtered.filter((b) => b.evPercent >= minEV);
     }
     return filtered;
-  }, [evBets, userBooksOnly, minEV]);
+  }, [evBets, minEV]);
 
-  // Filter arbs
+  // Filter arbs — only show arbs where ALL legs are at user books
   const filteredArbs = useMemo(() => {
-    if (!userBooksOnly) return arbs;
     return arbs.filter((a) =>
-      a.legs.some((l) =>
+      a.legs.every((l) =>
         (USER_BOOKS as readonly string[]).includes(l.bookKey)
       )
     );
-  }, [arbs, userBooksOnly]);
+  }, [arbs]);
 
   // Time ago helper
   function timeAgo(iso: string): string {
@@ -283,17 +277,6 @@ export function EVFinderClient() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 text-xs">
-        <button
-          onClick={() => setUserBooksOnly(!userBooksOnly)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors ${
-            userBooksOnly
-              ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-              : "bg-gray-800 text-gray-400 border border-gray-700"
-          }`}
-        >
-          <Filter size={12} />
-          My Books
-        </button>
         {activeTab === "ev" && (
           <div className="flex items-center gap-1.5">
             <span className="text-gray-500">Min EV:</span>
@@ -696,6 +679,7 @@ function LineShoppingPanel({
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {line.books
+                    .filter((b) => b.isUserBook)
                     .sort((a, b) => b.odds - a.odds)
                     .map((book) => (
                       <a
