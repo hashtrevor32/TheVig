@@ -168,8 +168,8 @@ export function EVFinderClient() {
   }
 
   // Fetch sharp picks for an event
-  async function handleFetchSharpPicks(eventId: string, sportKey: string) {
-    if (sharpPicks[eventId]) return;
+  async function handleFetchSharpPicks(eventId: string, sportKey: string, force?: boolean) {
+    if (sharpPicks[eventId] && !force) return;
     setLoadingSharpPicks(true);
     setSharpPicksError("");
 
@@ -442,6 +442,9 @@ export function EVFinderClient() {
                       onFetchSharpPicks={() =>
                         handleFetchSharpPicks(bet.eventId, bet.sport)
                       }
+                      onRefreshSharpPicks={() =>
+                        handleFetchSharpPicks(bet.eventId, bet.sport, true)
+                      }
                     />
                   )}
                 </div>
@@ -554,6 +557,9 @@ export function EVFinderClient() {
                       sharpPicksError={sharpPicksError}
                       onFetchSharpPicks={() =>
                         handleFetchSharpPicks(evt.eventId, evt.sport)
+                      }
+                      onRefreshSharpPicks={() =>
+                        handleFetchSharpPicks(evt.eventId, evt.sport, true)
                       }
                     />
                   )}
@@ -951,6 +957,7 @@ function ExpandedPanel({
   loadingSharpPicks,
   sharpPicksError,
   onFetchSharpPicks,
+  onRefreshSharpPicks,
 }: {
   sportKey: string;
   eventId: string;
@@ -963,6 +970,7 @@ function ExpandedPanel({
   loadingSharpPicks: boolean;
   sharpPicksError: string;
   onFetchSharpPicks: () => void;
+  onRefreshSharpPicks: () => void;
 }) {
   const isSharp = SHARP_PICKS_SPORTS.has(sportKey);
 
@@ -1017,6 +1025,7 @@ function ExpandedPanel({
           loading={loadingSharpPicks}
           error={sharpPicksError}
           onFetch={onFetchSharpPicks}
+          onRefresh={onRefreshSharpPicks}
         />
       )}
     </div>
@@ -1030,11 +1039,13 @@ function SharpPicksPanel({
   loading,
   error,
   onFetch,
+  onRefresh,
 }: {
   picks: SharpPicksResponse | null;
   loading: boolean;
   error: string;
   onFetch: () => void;
+  onRefresh: () => void;
 }) {
   if (loading) {
     return (
@@ -1099,14 +1110,23 @@ function SharpPicksPanel({
 
   return (
     <div className="p-4 space-y-4">
-      {/* Analysis overview */}
-      {picks.analysisNote && (
-        <div className="bg-white/60 backdrop-blur-sm border border-indigo-100 rounded-xl p-3.5">
-          <p className="text-slate-600 text-[13px] leading-relaxed">
-            {picks.analysisNote}
-          </p>
-        </div>
-      )}
+      {/* Analysis overview + refresh */}
+      <div className="flex items-start justify-between gap-3">
+        {picks.analysisNote && (
+          <div className="flex-1 bg-white/60 backdrop-blur-sm border border-indigo-100 rounded-xl p-3.5">
+            <p className="text-slate-600 text-[13px] leading-relaxed">
+              {picks.analysisNote}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={onRefresh}
+          className="shrink-0 p-2 bg-white/60 hover:bg-white border border-indigo-100 hover:border-indigo-200 rounded-xl text-indigo-400 hover:text-indigo-600 transition-colors"
+          title="Refresh picks"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
 
       {/* Picks by category */}
       {grouped.map((group) => (
