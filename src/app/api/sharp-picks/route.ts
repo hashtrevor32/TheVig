@@ -115,11 +115,13 @@ Do NOT just say "this has +5% EV so bet it." The EV Finder already does that. Yo
 
 Deliver 5-8 picks across these categories:
 - **main_lines**: Sides (moneyline, spread) or totals — backed by matchup analysis
-- **player_props**: Individual player overs/unders — backed by usage, matchup, minutes context
+- **player_props**: Individual player overs/unders — backed by usage, matchup, minutes context. The player's FULL NAME must appear in the pick (e.g. "Jayson Tatum Over 27.5 Points"). Use the exact player names from the odds data below.
 - **game_props**: BTTS, draw no bet, team-specific props — backed by tactical analysis
 - **longshots**: 1-2 bets at +300 or longer with a specific thesis for why the price is wrong
 
 === ODDS DATA (pre-analyzed with Pinnacle no-vig probabilities and EV calculations) ===
+
+The data below includes REAL LIVE ODDS from sportsbooks, including player prop lines with actual player names and lines. Use ONLY the players, lines, and odds that appear in this data. Do not invent players or lines that aren't listed.
 
 ${oddsPrompt}
 
@@ -133,7 +135,7 @@ Respond with ONLY this JSON structure (no other text):
     {
       "category": "main_lines | player_props | game_props | longshots",
       "market": "market key from the data (e.g. spreads, player_points, btts)",
-      "pick": "Human-readable pick (e.g. 'LeBron James Over 27.5 Points')",
+      "pick": "Human-readable pick (e.g. 'Jayson Tatum Over 27.5 Points')",
       "reasoning": "3-5 sentences of genuine analysis.",
       "confidence": "high | medium | speculative",
       "bestBook": "bet365 | fanduel | draftkings",
@@ -143,13 +145,16 @@ Respond with ONLY this JSON structure (no other text):
   ]
 }
 
-RULES:
+CRITICAL RULES:
+- Player props MUST include the player's FULL NAME exactly as it appears in the odds data
+- NEVER pick contradictory bets — do not pick BOTH sides of the same market (e.g. do not pick Team A spread AND Team B spread, or Over AND Under on the same total, or the same player Over AND Under)
+- Each pick must be a DIFFERENT angle on the game — build a coherent thesis, not random bets
 - ONLY recommend bets available at bet365, fanduel, or draftkings — use the exact book key
 - bestOdds MUST be an actual odds value from the data for that book
-- Reasoning must mention the specific teams/players by name — no generic analysis
-- At least 1 main line, at least 1 prop (if prop data exists), at least 1 longshot
-- If a market has no data, skip it — do not fabricate odds or outcomes
-- evPercent should be a number or null`,
+- At least 1 main line, at least 1 player prop (if prop data exists), at least 1 longshot
+- If a market has no data, skip it — do not fabricate odds, players, or outcomes
+- evPercent should be a number or null
+- Do NOT use special characters like em-dashes or curly quotes in strings — use only plain ASCII`,
         },
         {
           role: "assistant",
