@@ -19,7 +19,7 @@ import {
   type SharpPickCategory,
 } from "@/lib/sharp-picks-engine";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [
         {
           role: "user",
@@ -162,19 +162,32 @@ RULES:
       );
     }
 
+    // Check if response was truncated
+    if (response.stop_reason === "max_tokens") {
+      console.error("Sharp picks: Claude response truncated (hit max_tokens)");
+      return NextResponse.json(
+        { error: "Analysis was too long. Try again." },
+        { status: 500 }
+      );
+    }
+
     let jsonStr = textBlock.text.trim();
-    // Strip markdown code fences
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    console.log("Sharp picks raw response (first 300 chars):", jsonStr.substring(0, 300));
+
+    // Strip markdown code fences (all variations)
+    jsonStr = jsonStr.replace(/^```(?:json|JSON)?\s*\n?/, "").replace(/\n?\s*```\s*$/, "").trim();
+
+    // Extract the JSON object between first { and last }
+    const start = jsonStr.indexOf("{");
+    const end = jsonStr.lastIndexOf("}");
+    if (start === -1 || end <= start) {
+      console.error("Sharp picks: No JSON object found. Response:", jsonStr.substring(0, 500));
+      return NextResponse.json(
+        { error: "AI returned an unexpected format. Try again." },
+        { status: 500 }
+      );
     }
-    // If Claude added text before/after the JSON, extract just the JSON object
-    if (!jsonStr.startsWith("{")) {
-      const start = jsonStr.indexOf("{");
-      const end = jsonStr.lastIndexOf("}");
-      if (start !== -1 && end > start) {
-        jsonStr = jsonStr.substring(start, end + 1);
-      }
-    }
+    jsonStr = jsonStr.substring(start, end + 1);
 
     const parsed = JSON.parse(jsonStr);
 
