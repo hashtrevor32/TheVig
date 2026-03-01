@@ -89,10 +89,11 @@ export async function POST(req: NextRequest) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 8192,
+      system: "You are an elite sports handicapper. You MUST respond with ONLY a valid JSON object — no text before or after it, no markdown code fences, no explanation. Start your response with { and end with }.",
       messages: [
         {
           role: "user",
-          content: `You are an elite sports handicapper — not a calculator. Your job is to analyze this game like a professional bettor would: study the matchup, read the market, find angles, and deliver sharp, well-reasoned picks.
+          content: `Analyze this game like a professional bettor would: study the matchup, read the market, find angles, and deliver sharp, well-reasoned picks.
 
 The bettor has accounts at Bet365, FanDuel, and DraftKings ONLY. Pinnacle data is provided as a sharp market benchmark — never recommend betting at Pinnacle.
 
@@ -124,20 +125,20 @@ ${oddsPrompt}
 
 === RESPONSE FORMAT ===
 
-Return ONLY a JSON object with this structure:
+Respond with ONLY this JSON structure (no other text):
 
 {
-  "analysisNote": "2-3 sentence overview of this game — what's the narrative? What should bettors know about this matchup?",
+  "analysisNote": "2-3 sentence overview of this game",
   "picks": [
     {
-      "category": "main_lines" | "player_props" | "game_props" | "longshots",
+      "category": "main_lines | player_props | game_props | longshots",
       "market": "market key from the data (e.g. spreads, player_points, btts)",
       "pick": "Human-readable pick (e.g. 'LeBron James Over 27.5 Points')",
-      "reasoning": "3-5 sentences of genuine analysis. Explain the matchup angle, what the market is missing, and how the odds confirm value. Reference the specific teams/players involved. This should read like analysis from a professional handicapper.",
-      "confidence": "high" | "medium" | "speculative",
+      "reasoning": "3-5 sentences of genuine analysis.",
+      "confidence": "high | medium | speculative",
       "bestBook": "bet365 | fanduel | draftkings",
-      "bestOdds": <american odds number>,
-      "evPercent": <number or null>
+      "bestOdds": -110,
+      "evPercent": 5.2
     }
   ]
 }
@@ -148,7 +149,11 @@ RULES:
 - Reasoning must mention the specific teams/players by name — no generic analysis
 - At least 1 main line, at least 1 prop (if prop data exists), at least 1 longshot
 - If a market has no data, skip it — do not fabricate odds or outcomes
-- Return ONLY the JSON object, no other text`,
+- evPercent should be a number or null`,
+        },
+        {
+          role: "assistant",
+          content: "{",
         },
       ],
     });
@@ -171,23 +176,23 @@ RULES:
       );
     }
 
-    let jsonStr = textBlock.text.trim();
+    // Prepend the "{" we used as assistant prefill
+    let jsonStr = "{" + textBlock.text.trim();
     console.log("Sharp picks raw response (first 300 chars):", jsonStr.substring(0, 300));
 
-    // Strip markdown code fences (all variations)
-    jsonStr = jsonStr.replace(/^```(?:json|JSON)?\s*\n?/, "").replace(/\n?\s*```\s*$/, "").trim();
-
-    // Extract the JSON object between first { and last }
-    const start = jsonStr.indexOf("{");
-    const end = jsonStr.lastIndexOf("}");
-    if (start === -1 || end <= start) {
-      console.error("Sharp picks: No JSON object found. Response:", jsonStr.substring(0, 500));
+    // Strip any trailing markdown fences or text after the JSON
+    const lastBrace = jsonStr.lastIndexOf("}");
+    if (lastBrace === -1) {
+      console.error("Sharp picks: No closing brace found. Response:", jsonStr.substring(0, 500));
       return NextResponse.json(
         { error: "AI returned an unexpected format. Try again." },
         { status: 500 }
       );
     }
-    jsonStr = jsonStr.substring(start, end + 1);
+    jsonStr = jsonStr.substring(0, lastBrace + 1);
+
+    // Fix trailing commas (common JSON generation issue)
+    jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
 
     const parsed = JSON.parse(jsonStr);
 
