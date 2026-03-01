@@ -178,7 +178,6 @@ RULES:
 
     // Prepend the "{" we used as assistant prefill
     let jsonStr = "{" + textBlock.text.trim();
-    console.log("Sharp picks raw response (first 300 chars):", jsonStr.substring(0, 300));
 
     // Strip any trailing markdown fences or text after the JSON
     const lastBrace = jsonStr.lastIndexOf("}");
@@ -194,7 +193,40 @@ RULES:
     // Fix trailing commas (common JSON generation issue)
     jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
 
-    const parsed = JSON.parse(jsonStr);
+    // Fix control characters inside strings (newlines, tabs)
+    jsonStr = jsonStr.replace(/[\x00-\x1f]/g, (ch) => {
+      if (ch === "\n") return "\\n";
+      if (ch === "\r") return "\\r";
+      if (ch === "\t") return "\\t";
+      return "";
+    });
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error("Sharp picks JSON parse failed:", parseErr);
+      console.error("First 500 chars:", jsonStr.substring(0, 500));
+      console.error("Last 200 chars:", jsonStr.substring(jsonStr.length - 200));
+
+      // Last resort: try to extract a simpler structure
+      try {
+        // Sometimes Claude nests the JSON in an extra wrapper
+        const innerStart = jsonStr.indexOf('{"analysisNote"');
+        if (innerStart > 0) {
+          const innerStr = jsonStr.substring(innerStart);
+          const innerEnd = innerStr.lastIndexOf("}");
+          parsed = JSON.parse(innerStr.substring(0, innerEnd + 1));
+        } else {
+          throw parseErr;
+        }
+      } catch {
+        return NextResponse.json(
+          { error: "AI returned malformed data. Try again." },
+          { status: 500 }
+        );
+      }
+    }
 
     // 7. Enrich picks with deep links from our pre-analysis data
     const enrichedPicks: SharpPick[] = (parsed.picks || []).map(
