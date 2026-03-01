@@ -163,8 +163,17 @@ RULES:
     }
 
     let jsonStr = textBlock.text.trim();
+    // Strip markdown code fences
     if (jsonStr.startsWith("```")) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+    // If Claude added text before/after the JSON, extract just the JSON object
+    if (!jsonStr.startsWith("{")) {
+      const start = jsonStr.indexOf("{");
+      const end = jsonStr.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        jsonStr = jsonStr.substring(start, end + 1);
+      }
     }
 
     const parsed = JSON.parse(jsonStr);
