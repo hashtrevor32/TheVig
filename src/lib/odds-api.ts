@@ -69,6 +69,7 @@ export const USER_BOOKS = [
   "betmgm",
   "williamhill_us", // Caesars
   "fanatics",
+  "espnbet",
 ] as const;
 
 export const BOOK_DISPLAY_NAMES: Record<string, string> = {
@@ -92,10 +93,38 @@ export const BOOK_DISPLAY_NAMES: Record<string, string> = {
   twinspires: "TwinSpires",
   fliff: "Fliff",
   hardrockbet: "Hard Rock",
-  espnbet: "ESPN BET",
+  espnbet: "theScore Bet",
 };
 
 export const SHARP_BOOK = "pinnacle";
+
+// Books used for Sharp Picks suggestions (subset of USER_BOOKS)
+export const SHARP_PICKS_BOOKS = ["bet365", "fanduel", "draftkings"] as const;
+
+// Markets to fetch per sport for Sharp Picks (event-specific endpoint)
+export const SPORT_MARKETS: Record<string, string[]> = {
+  basketball_nba: [
+    "h2h", "spreads", "totals",
+    "player_points", "player_rebounds", "player_assists",
+    "player_threes", "player_points_rebounds_assists",
+    "player_blocks", "player_steals",
+  ],
+  basketball_ncaab: [
+    "h2h", "spreads", "totals",
+    "player_points", "player_rebounds", "player_assists",
+    "player_threes", "player_points_rebounds_assists",
+  ],
+  soccer_epl: [
+    "h2h", "spreads", "totals",
+    "btts", "draw_no_bet", "player_goal_scorer_anytime",
+  ],
+  soccer_usa_mls: [
+    "h2h", "spreads", "totals",
+    "btts", "draw_no_bet", "player_goal_scorer_anytime",
+  ],
+};
+
+export const SHARP_PICKS_SPORTS = new Set(Object.keys(SPORT_MARKETS));
 
 // User's state for sportsbook deep links (BetMGM uses {state} placeholder)
 export const USER_STATE = "nc";
@@ -115,7 +144,7 @@ const oddsCache = new Map<
   string,
   { data: OddsApiEvent[]; timestamp: number; creditsUsed: number }
 >();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 60 * 1000; // 1 minute
 
 let totalCreditsUsed = 0;
 let lastCreditsRemaining: number | null = null;
@@ -133,13 +162,14 @@ export function getCreditStats() {
 
 /** Replace {state} placeholders in sportsbook deep links */
 function fixLinks(events: OddsApiEvent[]): OddsApiEvent[] {
+  const statePattern = /\{state\}/g;
   for (const event of events) {
     for (const book of event.bookmakers) {
-      if (book.link) book.link = book.link.replace("{state}", USER_STATE);
+      if (book.link) book.link = book.link.replace(statePattern, USER_STATE);
       for (const market of book.markets) {
-        if (market.link) market.link = market.link.replace("{state}", USER_STATE);
+        if (market.link) market.link = market.link.replace(statePattern, USER_STATE);
         for (const outcome of market.outcomes) {
-          if (outcome.link) outcome.link = outcome.link.replace("{state}", USER_STATE);
+          if (outcome.link) outcome.link = outcome.link.replace(statePattern, USER_STATE);
         }
       }
     }
@@ -205,6 +235,60 @@ export async function fetchOddsForSport(
   });
 
   return upcoming;
+}
+
+// ── Event-specific odds (supports ALL markets including props) ────
+
+const eventOddsCache = new Map<
+  string,
+  { data: OddsApiEvent; timestamp: number }
+>();
+const EVENT_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+export async function fetchEventOdds(
+  sportKey: string,
+  eventId: string,
+  markets: string[]
+): Promise<OddsApiEvent | null> {
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!apiKey) throw new Error("ODDS_API_KEY not configured");
+
+  const cacheKey = `event:${eventId}:${markets.join(",")}`;
+  const cached = eventOddsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < EVENT_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const params = new URLSearchParams({
+    apiKey,
+    regions: "us,eu",
+    markets: markets.join(","),
+    oddsFormat: "american",
+    includeLinks: "true",
+    includeSids: "true",
+  });
+
+  const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/events/${eventId}/odds/?${params}`;
+  const res = await fetch(url);
+
+  const remaining = res.headers.get("x-requests-remaining");
+  const used = res.headers.get("x-requests-last");
+  if (remaining) lastCreditsRemaining = parseInt(remaining, 10);
+  if (used) totalCreditsUsed += parseInt(used, 10);
+
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    if (res.status === 401) throw new Error("Invalid ODDS_API_KEY");
+    if (res.status === 429) throw new Error("API rate limit exceeded");
+    throw new Error(`Odds API error: ${res.status}`);
+  }
+
+  const data: OddsApiEvent = await res.json();
+  const fixed = fixLinks([data])[0];
+
+  eventOddsCache.set(cacheKey, { data: fixed, timestamp: Date.now() });
+
+  return fixed;
 }
 
 export async function fetchOddsForAllActiveSports(
