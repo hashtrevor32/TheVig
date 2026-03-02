@@ -7,7 +7,8 @@
 // ── Raw API response types ──────────────────────────────────────────
 
 export type OddsApiOutcome = {
-  name: string; // Team name, "Over", "Under"
+  name: string; // Team name, "Over", "Under", or player name (goalscorer markets)
+  description?: string; // Player name for player prop markets
   price: number; // American odds (-110, +150)
   point?: number; // Spread/total line (-3.5, 215.5)
   link?: string; // Deep link to bet slip
@@ -116,11 +117,19 @@ export const SPORT_MARKETS: Record<string, string[]> = {
   ],
   soccer_epl: [
     "h2h", "spreads", "totals",
-    "btts", "draw_no_bet", "player_goal_scorer_anytime",
+    "btts", "draw_no_bet", "double_chance",
+    "team_totals", "totals_h1",
+    "player_goal_scorer_anytime", "player_first_goal_scorer",
+    "player_shots", "player_shots_on_target",
+    "player_assists", "player_to_receive_card",
   ],
   soccer_usa_mls: [
     "h2h", "spreads", "totals",
-    "btts", "draw_no_bet", "player_goal_scorer_anytime",
+    "btts", "draw_no_bet", "double_chance",
+    "team_totals", "totals_h1",
+    "player_goal_scorer_anytime", "player_first_goal_scorer",
+    "player_shots", "player_shots_on_target",
+    "player_assists", "player_to_receive_card",
   ],
 };
 

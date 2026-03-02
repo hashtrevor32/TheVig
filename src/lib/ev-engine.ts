@@ -134,6 +134,13 @@ export function removeVig3Way(
   return [imp1 / total, imp2 / total, imp3 / total];
 }
 
+/** Remove vig from an n-way market (golf outrights, etc.). Returns array of no-vig probs. */
+export function removeVigNWay(odds: number[]): number[] {
+  const implied = odds.map(americanToImpliedProb);
+  const total = implied.reduce((s, p) => s + p, 0);
+  return implied.map((p) => p / total);
+}
+
 /**
  * Calculate EV% for a bet.
  * trueProb = no-vig probability from Pinnacle (0-1)
@@ -201,8 +208,8 @@ export function findEVBets(
           pOutcomes[2].price
         );
       } else {
-        // For markets with many outcomes (golf outrights), skip for now
-        continue;
+        // N-way markets (golf outrights, etc.)
+        noVigProbs = removeVigNWay(pOutcomes.map((o) => o.price));
       }
 
       // Build a map of outcome name → no-vig prob and pinnacle odds
@@ -340,12 +347,39 @@ export function findArbs(events: OddsApiEvent[]): ArbOpportunity[] {
       // Need at least 2 outcomes for an arb
       if (outcomes.length < 2) continue;
 
-      // For spreads/totals: outcomes come in pairs by point value
-      // For h2h: just 2-3 outcomes (home/away or home/draw/away)
-      // We need to check that we have a complete set of outcomes
+      if (marketKey === "spreads") {
+        // ── SPREADS: Explicitly pair opposite sides ──
+        // Valid arb pair: Team A at point -X with Team B at point +X
+        // These are true opposites — exactly one always wins.
+        // NEVER pair same-sign points (e.g., Team A -1.5 + Team B -1.5)
+        // because both can lose in a 1-goal game.
+        const paired = new Set<string>();
 
-      // Group by point value for spreads/totals
-      if (marketKey === "spreads" || marketKey === "totals") {
+        for (const o1 of outcomes) {
+          const key1 = outcomeKey(o1.name, o1.point);
+          if (paired.has(key1)) continue;
+          if (o1.point === undefined) continue;
+
+          // Find the opposite: different team, opposite point value
+          const oppositePoint = -(o1.point);
+          const match = outcomes.find(
+            (o2) =>
+              o2.name !== o1.name &&
+              o2.point === oppositePoint &&
+              !paired.has(outcomeKey(o2.name, o2.point))
+          );
+          if (!match) continue;
+
+          paired.add(key1);
+          paired.add(outcomeKey(match.name, match.point));
+
+          // Exactly 2 outcomes that cover every possibility
+          checkArbGroup(event, marketKey, [o1, match], arbs);
+        }
+      } else if (marketKey === "totals") {
+        // ── TOTALS: Over X.5 vs Under X.5 ──
+        // Group by point value. Must have exactly 2 outcomes per group
+        // (Over and Under) with different names. Both share the same point.
         const byPoint = new Map<number, typeof outcomes>();
         for (const o of outcomes) {
           const pt = o.point ?? 0;
@@ -355,11 +389,23 @@ export function findArbs(events: OddsApiEvent[]): ArbOpportunity[] {
         }
 
         for (const [, group] of byPoint) {
-          if (group.length < 2) continue;
+          // Must be exactly 2 (Over + Under), no more
+          if (group.length !== 2) continue;
+          // Must be different outcomes (Over vs Under, not Over vs Over)
+          if (group[0].name === group[1].name) continue;
           checkArbGroup(event, marketKey, group, arbs);
         }
       } else {
-        // h2h — check all outcomes together
+        // ── H2H (Moneyline) ──
+        // 2-way (basketball, football, hockey): exactly 2 outcomes, one must win
+        // 3-way (soccer): exactly 3 outcomes (home/draw/away), one must happen
+        // Reject anything else as malformed data
+        if (outcomes.length !== 2 && outcomes.length !== 3) continue;
+
+        // All outcomes must have different names
+        const uniqueNames = new Set(outcomes.map((o) => o.name));
+        if (uniqueNames.size !== outcomes.length) continue;
+
         checkArbGroup(event, marketKey, outcomes, arbs);
       }
     }
@@ -392,6 +438,10 @@ function checkArbGroup(
 
   // Arb exists if total < 1 (< 100%)
   if (totalImplied >= 1) return;
+
+  // All legs must be at DIFFERENT books — same-book arbs get voided
+  const bookKeys = new Set(outcomes.map((o) => o.bookKey));
+  if (bookKeys.size < outcomes.length) return;
 
   const arbPercent =
     Math.round((1 / totalImplied - 1) * 100 * 100) / 100;

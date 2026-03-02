@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "thevig_session";
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/cron/"];
+const PUBLIC_PATHS = ["/login", "/setup", "/api/auth/login", "/api/auth/register", "/api/setup", "/api/cron/"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

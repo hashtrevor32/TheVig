@@ -8,22 +8,24 @@ datasource db {
 }
 
 model Group {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  members   Member[]
-  weeks     Week[]
-  operators Operator[]
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  members      Member[]
+  weeks        Week[]
+  operators    Operator[]
+  trackedPicks TrackedPick[]
 }
 
 model Operator {
-  id        String   @id @default(cuid())
-  groupId   String
-  group     Group    @relation(fields: [groupId], references: [id])
-  name      String   @unique
-  password  String
-  isAdmin   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String        @id @default(cuid())
+  groupId      String
+  group        Group         @relation(fields: [groupId], references: [id])
+  name         String        @unique
+  password     String
+  isAdmin      Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  trackedPicks TrackedPick[]
 }
 
 model Member {
@@ -160,4 +162,68 @@ model WeekStatement {
   houseOwesFreePlayUnits Int
 
   @@unique([weekId, memberId])
+}
+
+enum TrackedPickStatus {
+  PENDING
+  SETTLED
+  VOIDED
+}
+
+enum TrackedPickResult {
+  WIN
+  LOSS
+  PUSH
+}
+
+model TrackedPick {
+  id             String             @id @default(cuid())
+  operatorId     String
+  operator       Operator           @relation(fields: [operatorId], references: [id])
+  groupId        String
+  group          Group              @relation(fields: [groupId], references: [id])
+
+  // Source: "smart" (AI-generated) or "manual" (user-entered)
+  source         String             @default("smart")
+
+  // Event snapshot (optional for manual bets)
+  eventId        String?
+  sportKey       String?
+  sportDisplay   String?
+  homeTeam       String?
+  awayTeam       String?
+  commenceTime   DateTime?
+
+  // Pick snapshot (optional for manual bets except pick itself)
+  category       String?
+  market         String?
+  marketLabel    String?
+  pick           String
+  reasoning      String?
+  confidence     String?
+
+  // Odds snapshot
+  bestBook       String?
+  bestBookName   String?
+  bestOdds       Int
+  pinnacleOdds   Int?
+  evPercent      Float?
+
+  // Manual bet extras
+  bookState      String?            // US state where bet was placed (e.g. "NJ", "PA")
+
+  // Stake (user-entered, in dollars)
+  stakeAmount    Int?
+
+  // Settlement
+  status         TrackedPickStatus  @default(PENDING)
+  result         TrackedPickResult?
+  settledAt      DateTime?
+
+  // Timestamps
+  trackedAt      DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+
+  @@index([operatorId])
+  @@index([operatorId, status])
 }

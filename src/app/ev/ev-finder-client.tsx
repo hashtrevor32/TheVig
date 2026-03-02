@@ -13,10 +13,11 @@ import {
   Check,
   Zap,
   Sparkles,
+  Bookmark,
 } from "lucide-react";
 import type { EVBet, ArbOpportunity, GameOddsDetail } from "@/lib/ev-engine";
 import { SPORT_MAP, USER_BOOKS, BOOK_DISPLAY_NAMES, SHARP_PICKS_SPORTS } from "@/lib/odds-api";
-import type { SharpPicksResponse, SharpPickCategory } from "@/lib/sharp-picks-engine";
+import type { SharpPicksResponse, SharpPickCategory, SharpPick } from "@/lib/sharp-picks-engine";
 
 type Tab = "ev" | "arbs" | "lines";
 
@@ -57,6 +58,10 @@ export function EVFinderClient() {
   const [loadingSharpPicks, setLoadingSharpPicks] = useState(false);
   const [sharpPicksError, setSharpPicksError] = useState("");
   const [expandedSubTab, setExpandedSubTab] = useState<"lines" | "sharp">("lines");
+
+  // Tracked picks
+  const [trackedPickIds, setTrackedPickIds] = useState<Set<string>>(new Set());
+  const [trackingInProgress, setTrackingInProgress] = useState<string | null>(null);
 
   // Refresh cooldown
   const [cooldown, setCooldown] = useState(0);
@@ -179,18 +184,92 @@ export function EVFinderClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sportKey, eventId }),
       });
+
+      // Guard against non-JSON responses (Vercel timeout returns HTML)
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          res.status === 504
+            ? "Request timed out. Try again."
+            : "Server error. Try again."
+        );
+      }
+
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || "Failed to generate picks");
 
       setSharpPicks((prev) => ({ ...prev, [eventId]: data }));
       if (data.credits) setCredits(data.credits);
+
+      // Load tracked status for this event
+      loadTrackedStatus(eventId);
     } catch (err) {
       setSharpPicksError(
         err instanceof Error ? err.message : "Failed to generate picks"
       );
     } finally {
       setLoadingSharpPicks(false);
+    }
+  }
+
+  // Load which picks are already tracked for an event
+  async function loadTrackedStatus(eventId: string) {
+    try {
+      const res = await fetch(`/api/tracked-picks?eventId=${eventId}`);
+      const data = await res.json();
+      if (data.picks) {
+        setTrackedPickIds((prev) => {
+          const next = new Set(prev);
+          for (const tp of data.picks as { eventId: string; market: string; pick: string }[]) {
+            next.add(`${tp.eventId}:${tp.market}:${tp.pick}`);
+          }
+          return next;
+        });
+      }
+    } catch {
+      // Non-critical — track button will just show as untracked
+    }
+  }
+
+  // Track a sharp pick
+  async function handleTrackPick(picksResponse: SharpPicksResponse, pick: SharpPick, stakeAmount?: number) {
+    const key = `${picksResponse.eventId}:${pick.market}:${pick.pick}`;
+    if (trackedPickIds.has(key)) return;
+
+    setTrackingInProgress(key);
+    try {
+      const res = await fetch("/api/tracked-picks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: picksResponse.eventId,
+          sportKey: picksResponse.sportKey,
+          sportDisplay: picksResponse.sportDisplay,
+          homeTeam: picksResponse.homeTeam,
+          awayTeam: picksResponse.awayTeam,
+          commenceTime: picksResponse.commenceTime,
+          category: pick.category,
+          market: pick.market,
+          marketLabel: pick.marketLabel,
+          pick: pick.pick,
+          reasoning: pick.reasoning,
+          confidence: pick.confidence,
+          bestBook: pick.bestBook,
+          bestBookName: pick.bestBookName,
+          bestOdds: pick.bestOdds,
+          pinnacleOdds: pick.pinnacleOdds,
+          evPercent: pick.evPercent,
+          stakeAmount: stakeAmount || null,
+        }),
+      });
+      if (res.ok || res.status === 409) {
+        setTrackedPickIds((prev) => new Set(prev).add(key));
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setTrackingInProgress(null);
     }
   }
 
@@ -256,8 +335,8 @@ export function EVFinderClient() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            EV Finder
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            The Board
           </h2>
           <div className="flex items-center gap-3 mt-2">
             {lastUpdated && (
@@ -307,21 +386,21 @@ export function EVFinderClient() {
       </div>
 
       {/* Tabs — Segmented Control */}
-      <div className="flex gap-0.5 bg-slate-100 rounded-2xl p-1 border border-slate-200">
+      <div className="flex gap-0.5 bg-slate-900 rounded-2xl p-1">
         {(
           [
-            { key: "ev" as Tab, label: "EV Finder" },
-            { key: "arbs" as Tab, label: "Arb Finder" },
-            { key: "lines" as Tab, label: "Line Shop" },
+            { key: "ev" as Tab, label: "+EV Bets" },
+            { key: "arbs" as Tab, label: "Arbitrage" },
+            { key: "lines" as Tab, label: "Lines" },
           ] as const
         ).map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-2.5 text-sm font-medium rounded-xl ${
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl ${
               activeTab === tab.key
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                : "text-slate-400 hover:text-white"
             }`}
           >
             {tab.label}
@@ -394,7 +473,7 @@ export function EVFinderClient() {
         </div>
       )}
 
-      {/* EV Finder Tab */}
+      {/* +EV Bets Tab */}
       {!loading && activeTab === "ev" && (
         <div className="space-y-3">
           {filteredBets.length === 0 ? (
@@ -444,6 +523,11 @@ export function EVFinderClient() {
                       }
                       onRefreshSharpPicks={() =>
                         handleFetchSharpPicks(bet.eventId, bet.sport, true)
+                      }
+                      trackedPickIds={trackedPickIds}
+                      trackingInProgress={trackingInProgress}
+                      onTrackPick={(pick, stake) =>
+                        handleTrackPick(sharpPicks[bet.eventId], pick, stake)
                       }
                     />
                   )}
@@ -560,6 +644,11 @@ export function EVFinderClient() {
                       }
                       onRefreshSharpPicks={() =>
                         handleFetchSharpPicks(evt.eventId, evt.sport, true)
+                      }
+                      trackedPickIds={trackedPickIds}
+                      trackingInProgress={trackingInProgress}
+                      onTrackPick={(pick, stake) =>
+                        handleTrackPick(sharpPicks[evt.eventId], pick, stake)
                       }
                     />
                   )}
@@ -958,6 +1047,9 @@ function ExpandedPanel({
   sharpPicksError,
   onFetchSharpPicks,
   onRefreshSharpPicks,
+  trackedPickIds,
+  trackingInProgress,
+  onTrackPick,
 }: {
   sportKey: string;
   eventId: string;
@@ -971,6 +1063,9 @@ function ExpandedPanel({
   sharpPicksError: string;
   onFetchSharpPicks: () => void;
   onRefreshSharpPicks: () => void;
+  trackedPickIds: Set<string>;
+  trackingInProgress: string | null;
+  onTrackPick: (pick: SharpPick, stakeAmount?: number) => void;
 }) {
   const isSharp = SHARP_PICKS_SPORTS.has(sportKey);
 
@@ -1026,6 +1121,10 @@ function ExpandedPanel({
           error={sharpPicksError}
           onFetch={onFetchSharpPicks}
           onRefresh={onRefreshSharpPicks}
+          eventId={eventId}
+          trackedPickIds={trackedPickIds}
+          trackingInProgress={trackingInProgress}
+          onTrackPick={onTrackPick}
         />
       )}
     </div>
@@ -1040,13 +1139,22 @@ function SharpPicksPanel({
   error,
   onFetch,
   onRefresh,
+  eventId,
+  trackedPickIds,
+  trackingInProgress,
+  onTrackPick,
 }: {
   picks: SharpPicksResponse | null;
   loading: boolean;
   error: string;
   onFetch: () => void;
   onRefresh: () => void;
+  eventId: string;
+  trackedPickIds: Set<string>;
+  trackingInProgress: string | null;
+  onTrackPick: (pick: SharpPick, stakeAmount?: number) => void;
 }) {
+
   if (loading) {
     return (
       <div className="p-10 flex flex-col items-center justify-center gap-3">
@@ -1136,67 +1244,99 @@ function SharpPicksPanel({
             {group.label}
           </p>
           <div className="space-y-2.5">
-            {group.picks.map((pick, i) => (
-              <div
-                key={i}
-                className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-3 mb-2.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${confidenceStyles[pick.confidence]}`}
+            {group.picks.map((pick, i) => {
+              const trackKey = `${eventId}:${pick.market}:${pick.pick}`;
+              const isTracked = trackedPickIds.has(trackKey);
+              const isTracking = trackingInProgress === trackKey;
+
+              return (
+                <div
+                  key={i}
+                  className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${confidenceStyles[pick.confidence]}`}
+                        >
+                          {pick.confidence}
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-medium">
+                          {pick.marketLabel}
+                        </span>
+                        {pick.evPercent !== undefined && pick.evPercent > 0 && (
+                          <span className="text-emerald-600 text-[10px] font-bold">
+                            +{pick.evPercent.toFixed(1)}% EV
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-900 text-sm font-bold leading-snug">
+                        {pick.pick}
+                      </p>
+                    </div>
+
+                    {/* Bet + Track buttons */}
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isTracked) return;
+                          onTrackPick(pick);
+                        }}
+                        disabled={isTracked || isTracking}
+                        className={`p-2 rounded-xl border transition-all ${
+                          isTracked
+                            ? "bg-indigo-50 border-indigo-200 text-indigo-600"
+                            : "bg-white border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200"
+                        }`}
+                        title={isTracked ? "Pick tracked" : "Track this pick"}
                       >
-                        {pick.confidence}
-                      </span>
-                      <span className="text-slate-400 text-[10px] font-medium">
-                        {pick.marketLabel}
-                      </span>
-                      {pick.evPercent !== undefined && pick.evPercent > 0 && (
-                        <span className="text-emerald-600 text-[10px] font-bold">
-                          +{pick.evPercent.toFixed(1)}% EV
+                        {isTracking ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Bookmark
+                            size={14}
+                            className={isTracked ? "fill-current" : ""}
+                          />
+                        )}
+                      </button>
+
+                      {pick.deepLink ? (
+                        <a
+                          href={pick.deepLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-500/20 text-center"
+                        >
+                          <span className="text-[9px] opacity-80 block mb-0.5">
+                            {pick.bestBookName}
+                          </span>
+                          <span className="font-mono flex items-center gap-1">
+                            {pick.bestOddsFormatted}
+                            <ExternalLink size={9} />
+                          </span>
+                        </a>
+                      ) : (
+                        <span className="px-3 py-2 bg-slate-100 text-slate-500 text-xs font-medium rounded-xl border border-slate-200 text-center">
+                          <span className="text-[9px] text-slate-400 block mb-0.5">
+                            {pick.bestBookName}
+                          </span>
+                          <span className="font-mono">
+                            {pick.bestOddsFormatted}
+                          </span>
                         </span>
                       )}
                     </div>
-                    <p className="text-slate-900 text-sm font-bold leading-snug">
-                      {pick.pick}
-                    </p>
                   </div>
 
-                  {/* Bet button with book + odds */}
-                  {pick.deepLink ? (
-                    <a
-                      href={pick.deepLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-500/20 text-center"
-                    >
-                      <span className="text-[9px] opacity-80 block mb-0.5">
-                        {pick.bestBookName}
-                      </span>
-                      <span className="font-mono flex items-center gap-1">
-                        {pick.bestOddsFormatted}
-                        <ExternalLink size={9} />
-                      </span>
-                    </a>
-                  ) : (
-                    <span className="shrink-0 px-3 py-2 bg-slate-100 text-slate-500 text-xs font-medium rounded-xl border border-slate-200 text-center">
-                      <span className="text-[9px] text-slate-400 block mb-0.5">
-                        {pick.bestBookName}
-                      </span>
-                      <span className="font-mono">
-                        {pick.bestOddsFormatted}
-                      </span>
-                    </span>
-                  )}
+                  {/* Reasoning */}
+                  <p className="text-slate-500 text-xs leading-relaxed">
+                    {pick.reasoning}
+                  </p>
                 </div>
-
-                {/* Reasoning */}
-                <p className="text-slate-500 text-xs leading-relaxed">
-                  {pick.reasoning}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}

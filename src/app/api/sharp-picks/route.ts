@@ -5,7 +5,6 @@ import {
   fetchEventOdds,
   SPORT_MARKETS,
   SHARP_PICKS_SPORTS,
-  SHARP_PICKS_BOOKS,
   BOOK_DISPLAY_NAMES,
   getCreditStats,
   sportDisplayName,
@@ -80,208 +79,254 @@ export async function POST(req: NextRequest) {
     const isSoccer = sportKey.startsWith("soccer_");
 
     const sportContext = isSoccer
-      ? `This is a soccer match. Think about: team form, tactical setups (do they press high or sit back?), key absences, motivation (relegation fight? title chase? dead rubber?), home/away form splits, head-to-head history, and how the game script might unfold. Soccer is low-scoring — totals markets, BTTS, and anytime goalscorer props often have edges that the market misprices because recreational bettors overweight offense.`
+      ? `This is a soccer match. Think about: team form, tactical setups (do they press high or sit back?), key absences, motivation (relegation fight? title chase? dead rubber?), home/away form splits, head-to-head history, and how the game script might unfold. Soccer is low-scoring — totals markets, BTTS, and anytime goalscorer props often have edges that the market misprices because recreational bettors overweight offense. You have data for a wide range of markets including: main lines (moneyline, spread, total), game props (BTTS, draw no bet, double chance, team totals, 1st half total), and player props (anytime goalscorer, first goalscorer, player shots, shots on target, player assists, player to be booked). Use the FULL variety of markets available — don't just stick to goalscorer markets. Player shots, shots on target, and cards are where sharp edges often hide.`
       : `This is a basketball game. Think about: pace of play (fast-paced teams inflate totals and individual stats), back-to-back/rest advantages, injury impacts on usage rates and minutes distribution, home court advantage, matchup-specific factors (who guards whom?), garbage time implications for props, and how the expected game flow affects individual player outputs. Player props are where the biggest edges exist because books use algorithms that are slow to adjust for situational context.`;
 
-    // 5. Call Claude
+    // 5. Call Claude with tool use for guaranteed structured output
     const client = new Anthropic({ apiKey: anthropicKey });
 
+    const submitPicksTool: Anthropic.Messages.Tool = {
+      name: "submit_picks",
+      description:
+        "Submit your sharp picks analysis for this game. Call this tool with your analysis and picks.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          analysisNote: {
+            type: "string",
+            description: "2-3 sentence overview of this game and the betting landscape",
+          },
+          picks: {
+            type: "array",
+            description: "Array of 6-8 sharp picks across categories with variety",
+            items: {
+              type: "object",
+              properties: {
+                category: {
+                  type: "string",
+                  enum: ["main_lines", "player_props", "game_props", "longshots"],
+                  description: "Pick category",
+                },
+                market: {
+                  type: "string",
+                  description:
+                    "Market key from the odds data (e.g. spreads, player_points, btts)",
+                },
+                outcomeName: {
+                  type: "string",
+                  description:
+                    "EXACT outcome name from the odds data. For spreads/totals: 'Over' or 'Under' or team name. For h2h: team name. For BTTS: 'Yes' or 'No'. Must match the data exactly.",
+                },
+                outcomeDescription: {
+                  type: "string",
+                  description:
+                    "EXACT player name from the odds data for player prop markets (e.g. 'Jayson Tatum', 'Mohamed Salah'). Omit for non-player-prop markets.",
+                },
+                outcomePoint: {
+                  type: "number",
+                  description:
+                    "EXACT point/line value from the odds data (e.g. 27.5, -3.5, 215.5). Omit for markets without points like h2h, btts, goalscorer.",
+                },
+                pick: {
+                  type: "string",
+                  description:
+                    "Human-readable pick. For player props, include full player name (e.g. 'Jayson Tatum Over 27.5 Points')",
+                },
+                reasoning: {
+                  type: "string",
+                  description:
+                    "2-3 sentences of matchup analysis explaining WHY this bet wins",
+                },
+                confidence: {
+                  type: "string",
+                  enum: ["high", "medium", "speculative"],
+                  description: "Confidence level",
+                },
+              },
+              required: [
+                "category",
+                "market",
+                "outcomeName",
+                "pick",
+                "reasoning",
+                "confidence",
+              ],
+            },
+          },
+        },
+        required: ["analysisNote", "picks"],
+      },
+    };
+
     const response = await client.messages.create({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 8192,
-      system: "You are an elite sports handicapper. You MUST respond with ONLY a valid JSON object — no text before or after it, no markdown code fences, no explanation. Start your response with { and end with }.",
+      model: "claude-opus-4-0-20250514",
+      max_tokens: 4096,
+      tools: [submitPicksTool],
+      tool_choice: { type: "tool", name: "submit_picks" },
+      system:
+        "You are an elite sports handicapper. Analyze the game and submit your picks using the submit_picks tool.",
       messages: [
         {
           role: "user",
-          content: `Analyze this game like a professional bettor would: study the matchup, read the market, find angles, and deliver sharp, well-reasoned picks.
+          content: `You are handicapping this game. Your job is to use your SPORTS KNOWLEDGE to find edges — not to scan odds tables for the best numbers. Think like a sharp bettor who watches film, studies matchups, and understands context before ever looking at a line.
 
-The bettor has accounts at Bet365, FanDuel, and DraftKings ONLY. Pinnacle data is provided as a sharp market benchmark — never recommend betting at Pinnacle.
+The bettor has accounts at Bet365, FanDuel, and DraftKings ONLY. Pinnacle is a sharp benchmark — never recommend betting at Pinnacle.
 
 ${sportContext}
 
-=== YOUR ANALYSIS APPROACH ===
+=== HOW TO HANDICAP THIS GAME ===
 
-For EVERY pick you make, your reasoning should read like expert analysis, not a math equation. Explain:
+START with the matchup. THEN check if the odds support your thesis.
 
-1. **The matchup angle** — WHY does this bet win? What's the game situation, team context, or player matchup that creates the edge? Be specific about the teams and players involved.
+1. What is the STORYLINE of this game? Who needs a win more? What's the form, momentum, injury situation? What style of play should we expect?
 
-2. **What the market is missing** — Where is the market potentially wrong and why? Is public money inflating one side? Is a line stale because of late-breaking info? Are books slow to adjust a prop for a player whose role just changed?
+2. Based on that storyline, which players are set up to have big games? Which ones are in bad spots? Think about minutes, usage, defensive matchups, motivation.
 
-3. **What the odds confirm** — Use the pre-computed data to validate your thesis. If a book is offering better odds than the sharp line suggests, that confirms your angle. If books disagree by 15+ cents, someone is wrong — explain who and why.
+3. How should this game FLOW? Will it be high-scoring or a grind? Will one team dominate possession? Will it be close or a blowout? This shapes every bet.
 
-Do NOT just say "this has +5% EV so bet it." The EV Finder already does that. Your value is the ANALYSIS — the matchup insight, the situational edge, the reasoning a sharp bettor applies BEFORE checking the numbers.
+4. NOW look at the odds. Do the books agree with your read? Where do they disagree with each other? Where is a line soft because the public is overreacting or because books are slow to adjust?
+
+Your reasoning must reflect MATCHUP KNOWLEDGE — mention specific teams, players, tactical situations. Do NOT just describe what the numbers say.
 
 === PICK CATEGORIES ===
 
-Deliver 5-8 picks across these categories:
-- **main_lines**: Sides (moneyline, spread) or totals — backed by matchup analysis
-- **player_props**: Individual player overs/unders — backed by usage, matchup, minutes context. The player's FULL NAME must appear in the pick (e.g. "Jayson Tatum Over 27.5 Points"). Use the exact player names from the odds data below.
-- **game_props**: BTTS, draw no bet, team-specific props — backed by tactical analysis
-- **longshots**: 1-2 bets at +300 or longer with a specific thesis for why the price is wrong
+Deliver 6-8 picks across these categories, using the variety of markets available:
+- main_lines: Sides (moneyline, spread) or totals (1-2 picks)
+- player_props: Player shots, shots on target, goalscorer, cards, points, rebounds, etc. The player's FULL NAME must appear in the pick (e.g. "Mohamed Salah Over 2.5 Shots on Target" or "Jayson Tatum Over 27.5 Points"). Use the exact player names from the odds data. (2-3 picks from DIFFERENT prop markets)
+- game_props: BTTS, draw no bet, etc. (1-2 picks)
+- longshots: 1-2 bets at +300 or longer with a real thesis — not just "this pays a lot"
 
-=== ODDS DATA (pre-analyzed with Pinnacle no-vig probabilities and EV calculations) ===
+=== LIVE ODDS DATA ===
 
-The data below includes REAL LIVE ODDS from sportsbooks, including player prop lines with actual player names and lines. Use ONLY the players, lines, and odds that appear in this data. Do not invent players or lines that aren't listed.
+Below is the current odds market for this game across sportsbooks. Use these to find the best price for your picks.
 
 ${oddsPrompt}
 
-=== RESPONSE FORMAT ===
-
-Respond with ONLY this JSON structure (no other text):
-
-{
-  "analysisNote": "2-3 sentence overview of this game",
-  "picks": [
-    {
-      "category": "main_lines | player_props | game_props | longshots",
-      "market": "market key from the data (e.g. spreads, player_points, btts)",
-      "pick": "Human-readable pick (e.g. 'Jayson Tatum Over 27.5 Points')",
-      "reasoning": "3-5 sentences of genuine analysis.",
-      "confidence": "high | medium | speculative",
-      "bestBook": "bet365 | fanduel | draftkings",
-      "bestOdds": -110,
-      "evPercent": 5.2
-    }
-  ]
-}
-
-CRITICAL RULES:
+RULES:
+- NEVER recommend any pick with odds shorter than -200. No heavy favorites — the max favorite odds allowed is -200. If the best price is -201 or worse, skip it. We want VALUE, not chalk.
 - Player props MUST include the player's FULL NAME exactly as it appears in the odds data
-- NEVER pick contradictory bets — do not pick BOTH sides of the same market (e.g. do not pick Team A spread AND Team B spread, or Over AND Under on the same total, or the same player Over AND Under)
-- Each pick must be a DIFFERENT angle on the game — build a coherent thesis, not random bets
-- ONLY recommend bets available at bet365, fanduel, or draftkings — use the exact book key
-- bestOdds MUST be an actual odds value from the data for that book
-- At least 1 main line, at least 1 player prop (if prop data exists), at least 1 longshot
+- NEVER pick contradictory bets (both sides of the same market)
+- Each pick must be a DIFFERENT angle — build a coherent game thesis
+- ONLY recommend bets available at bet365, fanduel, or draftkings
+- At least 1 main line, at least 2 player props from different markets (if prop data exists), at least 1 game prop, at least 1 longshot
 - If a market has no data, skip it — do not fabricate odds, players, or outcomes
-- evPercent should be a number or null
-- Do NOT use special characters like em-dashes or curly quotes in strings — use only plain ASCII`,
-        },
-        {
-          role: "assistant",
-          content: "{",
+
+CRITICAL — OUTCOME IDENTIFIERS:
+- outcomeName MUST be the EXACT string from the data (e.g. "Over", "Under", "Yes", "No", or a team name like "Boston Celtics")
+- outcomeDescription MUST be the EXACT player name string for player prop markets (e.g. "Jayson Tatum" not "J. Tatum"). Omit this field entirely for non-player-prop markets.
+- outcomePoint MUST be the EXACT numerical line from the data (e.g. 27.5, not 28). Omit this field for markets without points (h2h, btts, goalscorer).
+- We use these identifiers to look up the ACTUAL best odds — so they must match the data exactly.`,
         },
       ],
     });
 
-    // 6. Parse Claude's response
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    // 6. Extract structured data from tool use response — no JSON parsing needed
+    const toolUseBlock = response.content.find(
+      (b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use"
+    );
+
+    if (!toolUseBlock) {
+      console.error(
+        "Sharp picks: No tool_use block in response. Stop reason:",
+        response.stop_reason
+      );
       return NextResponse.json(
-        { error: "AI analysis returned no results" },
+        { error: "AI analysis returned no results. Try again." },
         { status: 500 }
       );
     }
 
-    // Check if response was truncated
-    if (response.stop_reason === "max_tokens") {
-      console.error("Sharp picks: Claude response truncated (hit max_tokens)");
-      return NextResponse.json(
-        { error: "Analysis was too long. Try again." },
-        { status: 500 }
-      );
-    }
-
-    // Prepend the "{" we used as assistant prefill
-    let jsonStr = "{" + textBlock.text.trim();
-
-    // Strip any trailing markdown fences or text after the JSON
-    const lastBrace = jsonStr.lastIndexOf("}");
-    if (lastBrace === -1) {
-      console.error("Sharp picks: No closing brace found. Response:", jsonStr.substring(0, 500));
-      return NextResponse.json(
-        { error: "AI returned an unexpected format. Try again." },
-        { status: 500 }
-      );
-    }
-    jsonStr = jsonStr.substring(0, lastBrace + 1);
-
-    // Fix trailing commas (common JSON generation issue)
-    jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
-
-    // Fix control characters inside strings (newlines, tabs)
-    jsonStr = jsonStr.replace(/[\x00-\x1f]/g, (ch) => {
-      if (ch === "\n") return "\\n";
-      if (ch === "\r") return "\\r";
-      if (ch === "\t") return "\\t";
-      return "";
-    });
-
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      console.error("Sharp picks JSON parse failed:", parseErr);
-      console.error("First 500 chars:", jsonStr.substring(0, 500));
-      console.error("Last 200 chars:", jsonStr.substring(jsonStr.length - 200));
-
-      // Last resort: try to extract a simpler structure
-      try {
-        // Sometimes Claude nests the JSON in an extra wrapper
-        const innerStart = jsonStr.indexOf('{"analysisNote"');
-        if (innerStart > 0) {
-          const innerStr = jsonStr.substring(innerStart);
-          const innerEnd = innerStr.lastIndexOf("}");
-          parsed = JSON.parse(innerStr.substring(0, innerEnd + 1));
-        } else {
-          throw parseErr;
-        }
-      } catch {
-        return NextResponse.json(
-          { error: "AI returned malformed data. Try again." },
-          { status: 500 }
-        );
-      }
-    }
-
-    // 7. Enrich picks with deep links from our pre-analysis data
-    const enrichedPicks: SharpPick[] = (parsed.picks || []).map(
-      (pick: {
+    const parsed = toolUseBlock.input as {
+      analysisNote: string;
+      picks: Array<{
         category: SharpPickCategory;
         market: string;
+        outcomeName: string;
+        outcomeDescription?: string;
+        outcomePoint?: number;
         pick: string;
         reasoning: string;
         confidence: "high" | "medium" | "speculative";
-        bestBook: string;
-        bestOdds: number;
-        evPercent?: number;
-      }) => {
-        let deepLink: string | undefined;
-        let pinnacleOdds: number | undefined;
+      }>;
+    };
 
-        // Find the matching outcome to get the deep link
-        const marketAnalysis = analyses.find((a) => a.marketKey === pick.market);
-        if (marketAnalysis) {
+    // 7. Enrich picks — deterministic matching using structured identifiers,
+    //    ALWAYS use actual odds from data, never trust Claude's numbers
+    const fmtOdds = (odds: number) => (odds > 0 ? `+${odds}` : `${odds}`);
+
+    const enrichedPicks: SharpPick[] = (parsed.picks || []).map((pick) => {
+      let deepLink: string | undefined;
+      let pinnacleOdds: number | undefined;
+      let bestBook = "draftkings"; // fallback
+      let bestOdds = 0;
+
+      const marketAnalysis = analyses.find((a) => a.marketKey === pick.market);
+      if (marketAnalysis) {
+        // Deterministic match: use the structured identifiers Claude returned
+        const matched = marketAnalysis.outcomes.find((o) => {
+          // Name must match (e.g., "Over", "Under", "Yes", team name)
+          if (o.name.toLowerCase() !== pick.outcomeName.toLowerCase()) return false;
+
+          // For player props, description (player name) must match
+          if (pick.outcomeDescription) {
+            if (!o.description) return false;
+            if (o.description.toLowerCase() !== pick.outcomeDescription.toLowerCase()) return false;
+          }
+
+          // For lines with points, point must match
+          if (pick.outcomePoint !== undefined) {
+            if (o.point === undefined) return false;
+            if (o.point !== pick.outcomePoint) return false;
+          }
+
+          return true;
+        });
+
+        if (matched) {
+          pinnacleOdds = matched.pinnacleOdds;
+          // ALWAYS use the pre-computed best price from actual data
+          if (matched.bestUserBook) {
+            bestBook = matched.bestUserBook.bookKey;
+            bestOdds = matched.bestUserBook.odds;
+            deepLink = matched.bestUserBook.link;
+          }
+        } else {
+          // Fallback: fuzzy match by pick text (handles edge cases where identifiers are slightly off)
+          const pickLower = pick.pick.toLowerCase();
           for (const outcome of marketAnalysis.outcomes) {
-            const targetBook = outcome.books.find(
-              (b) => b.bookKey === pick.bestBook && b.odds === pick.bestOdds
-            );
-            if (targetBook) {
-              deepLink = targetBook.link;
+            const labelLower = outcome.label.toLowerCase();
+            if (pickLower.includes(labelLower) || labelLower.includes(pickLower)) {
               pinnacleOdds = outcome.pinnacleOdds;
+              if (outcome.bestUserBook) {
+                bestBook = outcome.bestUserBook.bookKey;
+                bestOdds = outcome.bestUserBook.odds;
+                deepLink = outcome.bestUserBook.link;
+              }
               break;
             }
           }
         }
-
-        const fmtOdds = (odds: number) => (odds > 0 ? `+${odds}` : `${odds}`);
-
-        return {
-          category: pick.category,
-          market: pick.market,
-          marketLabel: MARKET_LABELS[pick.market] || pick.market,
-          pick: pick.pick,
-          reasoning: pick.reasoning,
-          confidence: pick.confidence,
-          bestBook: pick.bestBook,
-          bestBookName: BOOK_DISPLAY_NAMES[pick.bestBook] || pick.bestBook,
-          bestOdds: pick.bestOdds,
-          bestOddsFormatted: fmtOdds(pick.bestOdds),
-          deepLink,
-          pinnacleOdds,
-          evPercent: pick.evPercent ?? undefined,
-        } satisfies SharpPick;
       }
-    );
+
+      return {
+        category: pick.category,
+        market: pick.market,
+        marketLabel: MARKET_LABELS[pick.market] || pick.market,
+        pick: pick.pick,
+        reasoning: pick.reasoning,
+        confidence: pick.confidence,
+        bestBook,
+        bestBookName: BOOK_DISPLAY_NAMES[bestBook] || bestBook,
+        bestOdds,
+        bestOddsFormatted: bestOdds !== 0 ? fmtOdds(bestOdds) : "N/A",
+        deepLink,
+        pinnacleOdds,
+        evPercent: undefined,
+      } satisfies SharpPick;
+    })
+
+    // Filter out any picks where we couldn't find actual odds
+    .filter((p) => p.bestOdds !== 0);
 
     const result: SharpPicksResponse = {
       eventId,

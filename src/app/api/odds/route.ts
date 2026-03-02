@@ -85,8 +85,20 @@ export async function GET(req: NextRequest) {
 
     // Default: EV mode
     const evBets = findEVBets(events);
+
+    // Build a summary of all events for line shopping
+    const eventSummaries = events.map((e) => ({
+      eventId: e.id,
+      sport: e.sport_key,
+      sportDisplay: e.sport_title,
+      homeTeam: e.home_team,
+      awayTeam: e.away_team,
+      commenceTime: e.commence_time,
+    }));
+
     return NextResponse.json({
       bets: evBets,
+      events: eventSummaries,
       totalEvents: events.length,
       lastUpdated: new Date().toISOString(),
       credits,

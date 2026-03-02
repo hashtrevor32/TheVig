@@ -56,6 +56,7 @@ export const MARKET_LABELS: Record<string, string> = {
   h2h: "Moneyline",
   spreads: "Spread",
   totals: "Total",
+  // Basketball player props
   player_points: "Player Points",
   player_rebounds: "Player Rebounds",
   player_assists: "Player Assists",
@@ -63,15 +64,25 @@ export const MARKET_LABELS: Record<string, string> = {
   player_points_rebounds_assists: "Player PRA",
   player_blocks: "Player Blocks",
   player_steals: "Player Steals",
+  // Soccer game props
   btts: "Both Teams to Score",
   draw_no_bet: "Draw No Bet",
+  double_chance: "Double Chance",
+  team_totals: "Team Total Goals",
+  totals_h1: "1st Half Total",
+  // Soccer player props
   player_goal_scorer_anytime: "Anytime Goalscorer",
+  player_first_goal_scorer: "First Goalscorer",
+  player_shots: "Player Shots",
+  player_shots_on_target: "Player Shots on Target",
+  player_to_receive_card: "Player to Be Booked",
 };
 
 const MARKET_CATEGORIES: Record<string, SharpPickCategory> = {
   h2h: "main_lines",
   spreads: "main_lines",
   totals: "main_lines",
+  // Basketball player props
   player_points: "player_props",
   player_rebounds: "player_props",
   player_assists: "player_props",
@@ -79,15 +90,25 @@ const MARKET_CATEGORIES: Record<string, SharpPickCategory> = {
   player_points_rebounds_assists: "player_props",
   player_blocks: "player_props",
   player_steals: "player_props",
+  // Soccer game props
   btts: "game_props",
   draw_no_bet: "game_props",
+  double_chance: "game_props",
+  team_totals: "game_props",
+  totals_h1: "game_props",
+  // Soccer player props
   player_goal_scorer_anytime: "player_props",
+  player_first_goal_scorer: "player_props",
+  player_shots: "player_props",
+  player_shots_on_target: "player_props",
+  player_to_receive_card: "player_props",
 };
 
 // ── Pre-analysis types ──────────────────────────────────────────────
 
 export type OutcomeAnalysis = {
   name: string;
+  description?: string; // Player name for player props
   point?: number;
   label: string;
   pinnacleOdds?: number;
@@ -153,7 +174,11 @@ export function analyzeEventOdds(event: OddsApiEvent): MarketAnalysis[] {
       }
 
       pinnacleMarket.outcomes.forEach((o, i) => {
-        const key = o.point !== undefined ? `${o.name}|${o.point}` : o.name;
+        // Include description (player name) in key for player props
+        const parts = [o.name];
+        if (o.description) parts.push(o.description);
+        if (o.point !== undefined) parts.push(String(o.point));
+        const key = parts.join("|");
         noVigMap!.set(key, { prob: probs[i], odds: o.price });
       });
     }
@@ -166,19 +191,34 @@ export function analyzeEventOdds(event: OddsApiEvent): MarketAnalysis[] {
       if (!bMarket) continue;
 
       for (const outcome of bMarket.outcomes) {
-        const key = outcome.point !== undefined
-          ? `${outcome.name}|${outcome.point}`
-          : outcome.name;
+        // Build grouping key: include description (player name) for player props
+        const keyParts = [outcome.name];
+        if (outcome.description) keyParts.push(outcome.description);
+        if (outcome.point !== undefined) keyParts.push(String(outcome.point));
+        const key = keyParts.join("|");
 
         if (!outcomeMap.has(key)) {
-          const label = outcome.point !== undefined
-            ? `${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`
-            : outcome.name;
+          // Build human-readable label including player name
+          let label: string;
+          if (outcome.description && outcome.point !== undefined) {
+            // Player prop: "Jayson Tatum Over 27.5"
+            label = `${outcome.description} ${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`;
+          } else if (outcome.description) {
+            // Player prop without point: "Jayson Tatum Over"
+            label = `${outcome.description} ${outcome.name}`;
+          } else if (outcome.point !== undefined) {
+            // Spread/total: "Over +215.5"
+            label = `${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`;
+          } else {
+            // Moneyline/goalscorer: "Team A" or "Mohamed Salah"
+            label = outcome.name;
+          }
 
           const pinnData = noVigMap?.get(key);
 
           outcomeMap.set(key, {
             name: outcome.name,
+            description: outcome.description,
             point: outcome.point,
             label,
             pinnacleOdds: pinnData?.odds,
@@ -251,15 +291,32 @@ export function formatAnalysisForPrompt(
   lines.push(`TIME: ${event.commence_time}`);
   lines.push("");
 
+  // Max outcomes per market to keep prompt compact (player props can have 30+ players)
+  const MAX_OUTCOMES_PLAYER_PROPS = 10;
+  const MAX_OUTCOMES_OTHER = 20;
+
   for (const analysis of analyses) {
     lines.push(`=== ${analysis.marketLabel.toUpperCase()} (${analysis.marketKey}) ===`);
 
-    for (const outcome of analysis.outcomes) {
+    // For player prop markets, only send top outcomes sorted by EV / odds disagreement
+    const isPlayerProp = analysis.category === "player_props";
+    const maxOutcomes = isPlayerProp ? MAX_OUTCOMES_PLAYER_PROPS : MAX_OUTCOMES_OTHER;
+
+    let outcomes = analysis.outcomes;
+    if (outcomes.length > maxOutcomes) {
+      // Prioritize outcomes where books disagree (interesting lines), not highest EV
+      outcomes = [...outcomes].sort((a, b) => {
+        return (b.oddsRange) - (a.oddsRange);
+      }).slice(0, maxOutcomes);
+    }
+
+    for (const outcome of outcomes) {
       lines.push(`  ${outcome.label}:`);
 
+      // Show sharp market benchmark (Pinnacle no-vig) — but NOT EV%
       if (outcome.pinnacleOdds !== undefined && outcome.noVigProb !== undefined) {
         lines.push(
-          `    Pinnacle: ${fmtOdds(outcome.pinnacleOdds)} | No-vig prob: ${(outcome.noVigProb * 100).toFixed(1)}%`
+          `    Sharp line (Pinnacle): ${fmtOdds(outcome.pinnacleOdds)} | True prob: ${(outcome.noVigProb * 100).toFixed(1)}%`
         );
       }
 
@@ -267,15 +324,18 @@ export function formatAnalysisForPrompt(
         (SHARP_PICKS_BOOKS as readonly string[]).includes(b.bookKey)
       );
 
+      // Show odds at each book — no EV%. Claude should handicap, not calculator.
       for (const book of targetBooks) {
-        const evStr = book.evPercent !== undefined
-          ? ` | EV: ${book.evPercent > 0 ? "+" : ""}${book.evPercent.toFixed(1)}%`
-          : "";
-        lines.push(`    ${book.bookName}: ${fmtOdds(book.odds)}${evStr}`);
+        lines.push(`    ${book.bookName}: ${fmtOdds(book.odds)}`);
+      }
+
+      // Explicitly mark the best available price so Claude uses it
+      if (outcome.bestUserBook) {
+        lines.push(`    >>> BEST PRICE: ${outcome.bestUserBook.bookName} @ ${fmtOdds(outcome.bestUserBook.odds)}`);
       }
 
       if (outcome.oddsRange > 15) {
-        lines.push(`    ** ODDS DISAGREEMENT: ${outcome.oddsRange} cent spread **`);
+        lines.push(`    ** BOOKS DISAGREE: ${outcome.oddsRange} cent spread — someone is wrong **`);
       }
 
       lines.push("");

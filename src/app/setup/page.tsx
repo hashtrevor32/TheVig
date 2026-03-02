@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
-  const [name, setName] = useState("");
+export default function SetupPage() {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -13,20 +14,28 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (password !== confirmPassword) {
+      setError("Passwords don't match");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, password }),
+        body: JSON.stringify({ username, password }),
       });
+
+      const data = await res.json();
 
       if (res.ok) {
         router.push("/ev");
         router.refresh();
       } else {
-        setError("Invalid credentials");
+        setError(data.error || "Something went wrong");
       }
     } catch {
       setError("Something went wrong");
@@ -43,7 +52,7 @@ export default function LoginPage() {
             TheVig
           </h1>
           <p className="text-slate-500 mt-3 text-sm font-medium">
-            Sharp Bets. Better Odds.
+            Create your account
           </p>
         </div>
 
@@ -54,8 +63,8 @@ export default function LoginPage() {
           <div>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               placeholder="Username"
               className="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
               autoFocus
@@ -72,6 +81,15 @@ export default function LoginPage() {
               className="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
             />
           </div>
+          <div>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm Password"
+              className="w-full px-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
+            />
+          </div>
 
           {error && (
             <p className="text-red-400 text-sm text-center">{error}</p>
@@ -79,17 +97,17 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !name || !password}
+            disabled={loading || !username || !password || !confirmPassword}
             className="w-full py-3.5 btn-accent rounded-xl text-base"
           >
-            {loading ? "..." : "Sign In"}
+            {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
 
         <p className="text-center text-slate-600 text-sm mt-6">
-          New here?{" "}
-          <a href="/setup" className="text-emerald-500 hover:text-emerald-400 font-medium">
-            Create an account
+          Already have an account?{" "}
+          <a href="/login" className="text-emerald-500 hover:text-emerald-400 font-medium">
+            Sign in
           </a>
         </p>
       </div>

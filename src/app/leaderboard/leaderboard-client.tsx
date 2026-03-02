@@ -1,266 +1,205 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
+import { Trophy, Flame, Crown, ChevronRight } from "lucide-react";
+import { computePickStats, type PickStats } from "@/lib/pick-stats";
 
-type LeaderboardEntry = {
-  memberId: string;
-  name: string;
-  totalPL: number;
-  totalFreePlay: number;
-  weeksPlayed: number;
-  wins: number;
-  losses: number;
-  bestWeek: number;
-  worstWeek: number;
-  avgScore: number;
+type LeaderboardEntry = PickStats & {
+  operatorId: string;
+  operatorName: string;
 };
 
-type WeekInfo = {
+type OperatorInfo = {
   id: string;
   name: string;
-  closedAt: string;
 };
 
-type StatementData = {
-  memberId: string;
-  memberName: string;
-  weekId: string;
-  cashProfitUnits: number;
-  freePlayEarnedUnits: number;
-  weeklyScoreUnits: number;
+type SerializedPick = {
+  operatorId: string;
+  status: string;
+  result: string | null;
+  bestOdds: number;
+  stakeAmount: number | null;
+  settledAt: string | null;
+  trackedAt: string;
 };
+
+type TimeFilter = "all" | "7d" | "30d";
+
+function fmtMoney(amount: number): string {
+  const prefix = amount >= 0 ? "+$" : "-$";
+  return `${prefix}${Math.abs(amount).toLocaleString()}`;
+}
 
 export function LeaderboardClient({
-  leaderboard: allLeaderboard,
-  weeks,
-  statements,
+  entries: allEntries,
+  operators,
+  picks,
 }: {
-  leaderboard: LeaderboardEntry[];
-  weeks: WeekInfo[];
-  statements: StatementData[];
+  entries: LeaderboardEntry[];
+  operators: OperatorInfo[];
+  picks: SerializedPick[];
 }) {
-  const [filter, setFilter] = useState<"all" | "range">("all");
-  const [startWeek, setStartWeek] = useState(weeks[weeks.length - 1]?.id ?? "");
-  const [endWeek, setEndWeek] = useState(weeks[0]?.id ?? "");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
 
-  const leaderboard = useMemo(() => {
-    if (filter === "all" || weeks.length === 0) return allLeaderboard;
+  const entries = useMemo(() => {
+    if (timeFilter === "all") return allEntries;
 
-    // Get week IDs in the selected range
-    const startIdx = weeks.findIndex((w) => w.id === startWeek);
-    const endIdx = weeks.findIndex((w) => w.id === endWeek);
-    const lo = Math.min(startIdx, endIdx);
-    const hi = Math.max(startIdx, endIdx);
-    const weekIds = new Set(weeks.slice(lo, hi + 1).map((w) => w.id));
+    const now = Date.now();
+    const cutoff =
+      timeFilter === "7d" ? now - 7 * 86400000 : now - 30 * 86400000;
 
-    const filtered = statements.filter((s) => weekIds.has(s.weekId));
-
-    // Re-aggregate
-    const memberMap = new Map<
-      string,
-      LeaderboardEntry & { scores: number[] }
-    >();
-
-    // Group by week for W-L
-    const weekResults = new Map<
-      string,
-      { memberId: string; score: number }[]
-    >();
-
-    for (const s of filtered) {
-      if (!weekResults.has(s.weekId)) weekResults.set(s.weekId, []);
-      weekResults.get(s.weekId)!.push({
-        memberId: s.memberId,
-        score: s.weeklyScoreUnits,
-      });
-
-      const existing = memberMap.get(s.memberId);
-      if (existing) {
-        existing.totalPL += s.cashProfitUnits;
-        existing.totalFreePlay += s.freePlayEarnedUnits;
-        existing.weeksPlayed += 1;
-        existing.scores.push(s.weeklyScoreUnits);
-        if (s.weeklyScoreUnits > existing.bestWeek)
-          existing.bestWeek = s.weeklyScoreUnits;
-        if (s.weeklyScoreUnits < existing.worstWeek)
-          existing.worstWeek = s.weeklyScoreUnits;
-      } else {
-        memberMap.set(s.memberId, {
-          memberId: s.memberId,
-          name: s.memberName,
-          totalPL: s.cashProfitUnits,
-          totalFreePlay: s.freePlayEarnedUnits,
-          weeksPlayed: 1,
-          wins: 0,
-          losses: 0,
-          bestWeek: s.weeklyScoreUnits,
-          worstWeek: s.weeklyScoreUnits,
-          avgScore: 0,
-          scores: [s.weeklyScoreUnits],
-        });
-      }
-    }
-
-    for (const [, results] of weekResults) {
-      if (results.length === 0) continue;
-      const sorted = [...results].sort((a, b) => b.score - a.score);
-      const bestEntry = memberMap.get(sorted[0].memberId);
-      if (bestEntry) bestEntry.wins += 1;
-      const worstEntry = memberMap.get(sorted[sorted.length - 1].memberId);
-      if (worstEntry && results.length > 1) worstEntry.losses += 1;
-    }
-
-    for (const [, m] of memberMap) {
-      m.avgScore =
-        m.scores.length > 0
-          ? Math.round(
-              m.scores.reduce((a, b) => a + b, 0) / m.scores.length
-            )
-          : 0;
-    }
-
-    return [...memberMap.values()].sort((a, b) => b.totalPL - a.totalPL);
-  }, [filter, startWeek, endWeek, allLeaderboard, statements, weeks]);
-
-  if (weeks.length === 0) {
-    return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-white">Leaderboard</h2>
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-          <p className="text-gray-500">No closed weeks yet.</p>
-          <p className="text-gray-600 text-sm mt-1">
-            Close a week to see lifetime standings.
-          </p>
-        </div>
-      </div>
+    const filtered = picks.filter(
+      (p) => new Date(p.trackedAt).getTime() >= cutoff
     );
-  }
+
+    const byOp = new Map<string, SerializedPick[]>();
+    for (const p of filtered) {
+      const arr = byOp.get(p.operatorId) ?? [];
+      arr.push(p);
+      byOp.set(p.operatorId, arr);
+    }
+
+    const result: LeaderboardEntry[] = [];
+    for (const op of operators) {
+      const opPicks = byOp.get(op.id);
+      if (!opPicks || opPicks.length === 0) continue;
+      const stats = computePickStats(opPicks);
+      result.push({ operatorId: op.id, operatorName: op.name, ...stats });
+    }
+
+    return result.sort((a, b) => b.totalProfit - a.totalProfit);
+  }, [timeFilter, allEntries, operators, picks]);
+
+  const rankBadge = (i: number) => {
+    if (i === 0)
+      return "bg-gradient-to-br from-amber-400 to-amber-500 text-white shadow-md shadow-amber-400/30";
+    if (i === 1)
+      return "bg-gradient-to-br from-slate-300 to-slate-400 text-white shadow-sm";
+    if (i === 2)
+      return "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow-sm";
+    return "bg-slate-100 text-slate-500";
+  };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Leaderboard</h2>
-
-      {/* Filter */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setFilter("all")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            filter === "all"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-800 text-gray-400 hover:text-white"
-          }`}
-        >
-          All Time
-        </button>
-        <button
-          onClick={() => setFilter("range")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            filter === "range"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-800 text-gray-400 hover:text-white"
-          }`}
-        >
-          Date Range
-        </button>
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+          Rankings
+        </h2>
       </div>
 
-      {filter === "range" && (
-        <div className="flex items-center gap-2">
-          <select
-            value={startWeek}
-            onChange={(e) => setStartWeek(e.target.value)}
-            className="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+      {/* Time filter */}
+      <div className="flex items-center gap-1.5 bg-slate-900 rounded-xl p-1 w-fit">
+        {(["all", "7d", "30d"] as TimeFilter[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setTimeFilter(f)}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              timeFilter === f
+                ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                : "text-slate-400 hover:text-white"
+            }`}
           >
-            {weeks.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-          <span className="text-gray-500 text-xs">to</span>
-          <select
-            value={endWeek}
-            onChange={(e) => setEndWeek(e.target.value)}
-            className="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {weeks.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Leaderboard Cards */}
-      <div className="space-y-2">
-        {leaderboard.map((entry, i) => (
-          <div
-            key={entry.memberId}
-            className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-4"
-          >
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                i === 0
-                  ? "bg-yellow-500/20 text-yellow-400"
-                  : i === 1
-                  ? "bg-gray-400/20 text-gray-300"
-                  : i === 2
-                  ? "bg-orange-500/20 text-orange-400"
-                  : "bg-gray-800 text-gray-500"
-              }`}
-            >
-              {i + 1}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-medium">{entry.name}</p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                <span className="text-xs text-gray-500">
-                  {entry.weeksPlayed}w
-                </span>
-                <span className="text-xs text-gray-500">
-                  {entry.wins}W-{entry.losses}L
-                </span>
-                <span className="text-xs text-gray-500">
-                  Avg {entry.avgScore >= 0 ? "+" : ""}
-                  {entry.avgScore}
-                </span>
-                {entry.totalFreePlay > 0 && (
-                  <span className="text-xs text-blue-400">
-                    +{entry.totalFreePlay} FP
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3 mt-0.5">
-                <span className="text-xs text-gray-600">
-                  Best: {entry.bestWeek >= 0 ? "+" : ""}
-                  {entry.bestWeek}
-                </span>
-                <span className="text-xs text-gray-600">
-                  Worst: {entry.worstWeek >= 0 ? "+" : ""}
-                  {entry.worstWeek}
-                </span>
-              </div>
-            </div>
-            <span
-              className={`text-lg font-bold ${
-                entry.totalPL > 0
-                  ? "text-green-400"
-                  : entry.totalPL < 0
-                  ? "text-red-400"
-                  : "text-gray-400"
-              }`}
-            >
-              {entry.totalPL >= 0 ? "+" : ""}
-              {entry.totalPL}
-            </span>
-          </div>
+            {f === "all"
+              ? "All Time"
+              : f === "7d"
+                ? "7 Days"
+                : "30 Days"}
+          </button>
         ))}
       </div>
 
-      {leaderboard.length === 0 && (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8 text-center">
-          <p className="text-gray-500">No data for selected range.</p>
+      {entries.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+          <Trophy size={36} className="mx-auto text-slate-300 mb-3" />
+          <p className="text-slate-500 font-medium">No tracked picks yet.</p>
+          <p className="text-slate-400 text-sm mt-1">
+            Track picks from The Board to appear on the rankings.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry, i) => (
+            <Link
+              key={entry.operatorId}
+              href={`/users/${entry.operatorId}`}
+              className={`block bg-white rounded-2xl border shadow-sm p-4 hover:shadow-md transition-all ${
+                i === 0
+                  ? "border-amber-200 hover:border-amber-300"
+                  : "border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {/* Rank badge */}
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${rankBadge(i)}`}
+                >
+                  {i === 0 ? (
+                    <Crown size={18} />
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+
+                {/* Name + record */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-900 font-bold truncate">
+                    {entry.operatorName}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                    <span className="text-xs font-medium text-slate-500">
+                      {entry.wins}W-{entry.losses}L
+                      {entry.pushes > 0 && `-${entry.pushes}P`}
+                    </span>
+                    {entry.wins + entry.losses > 0 && (
+                      <span className="text-xs text-slate-400">
+                        {entry.winRate}%
+                      </span>
+                    )}
+                    {entry.roi !== 0 && (
+                      <span
+                        className={`text-xs font-semibold ${
+                          entry.roi > 0 ? "text-emerald-600" : "text-red-500"
+                        }`}
+                      >
+                        {entry.roi > 0 ? "+" : ""}
+                        {entry.roi}% ROI
+                      </span>
+                    )}
+                    {entry.streak >= 3 && entry.streakType === "W" && (
+                      <span className="flex items-center gap-0.5 text-xs font-bold text-orange-500">
+                        <Flame size={12} />
+                        {entry.streak}W
+                      </span>
+                    )}
+                    {entry.pending > 0 && (
+                      <span className="text-xs text-slate-400">
+                        {entry.pending} live
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* P&L */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xl font-extrabold tabular-nums ${
+                      entry.totalProfit > 0
+                        ? "text-emerald-600"
+                        : entry.totalProfit < 0
+                          ? "text-red-500"
+                          : "text-slate-400"
+                    }`}
+                  >
+                    {fmtMoney(entry.totalProfit)}
+                  </span>
+                  <ChevronRight size={16} className="text-slate-300" />
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </div>

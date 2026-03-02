@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #f5f5f7;
+  --background: #f9fafb;
+  --foreground: #0f172a;
+  --accent: #10b981;
+  --accent-dark: #059669;
 }
 
 @theme inline {
@@ -20,19 +22,44 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Gradient text utility */
+.text-gradient {
+  background: linear-gradient(135deg, #10b981 0%, #14b8a6 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Accent button gradient */
+.btn-accent {
+  background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+}
+.btn-accent:hover {
+  background: linear-gradient(135deg, #059669 0%, #0f766e 100%);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+.btn-accent:disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+/* Nav active state gradient */
+.nav-active {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
-}
-
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 button, a, input, select {
