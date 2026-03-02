@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     };
 
     const response = await client.messages.create({
-      model: "claude-opus-4-0-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 4096,
       tools: [submitPicksTool],
       tool_choice: { type: "tool", name: "submit_picks" },
