@@ -695,7 +695,7 @@ function AddBetForm({
             </label>
             <input
               type="text"
-              inputMode="numeric"
+              inputMode="text"
               value={oddsStr}
               onChange={(e) => setOddsStr(e.target.value.replace(/[^0-9+-]/g, ""))}
               placeholder="+150 or -110"
