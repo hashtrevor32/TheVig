@@ -89,11 +89,45 @@ const US_STATES = [
 const LEAGUES: { label: string; titles: string[] }[] = [
   { label: "NFL", titles: ["Super Bowl", "AFC Championship", "NFC Championship", "NFL Draft"] },
   { label: "NBA", titles: ["NBA Finals", "NBA Playoffs", "NBA All-Star"] },
-  { label: "NCAAB", titles: ["March Madness", "NCAA Championship", "Final Four", "Elite Eight", "Sweet Sixteen"] },
+  { label: "NCAAB", titles: [
+    "March Madness", "NCAA Championship", "Final Four", "Elite Eight", "Sweet Sixteen",
+    // Conference Tournaments
+    "ACC Tournament", "Big Ten Tournament", "Big 12 Tournament", "SEC Tournament", "Big East Tournament",
+    "AAC Tournament", "A-10 Tournament", "ASUN Tournament", "Big Sky Tournament", "Big South Tournament",
+    "Big West Tournament", "CAA Tournament", "Conference USA Tournament", "Horizon League Tournament",
+    "Ivy League Tournament", "MAAC Tournament", "MAC Tournament", "MEAC Tournament",
+    "Missouri Valley Tournament", "Mountain West Tournament", "NEC Tournament", "OVC Tournament",
+    "Pac-12 Tournament", "Patriot League Tournament", "Southern Conference Tournament",
+    "Southland Tournament", "Summit League Tournament", "Sun Belt Tournament", "SWAC Tournament",
+    "WAC Tournament", "WCC Tournament",
+  ] },
   { label: "NCAAF", titles: ["CFP National Championship", "CFP Playoff", "Rose Bowl", "Sugar Bowl", "Orange Bowl", "Cotton Bowl", "Fiesta Bowl", "Peach Bowl"] },
-  { label: "MLB", titles: ["World Series", "ALCS", "NLCS", "MLB Playoffs", "All-Star Game"] },
+  { label: "MLB", titles: ["World Series", "ALCS", "NLCS", "MLB Playoffs", "All-Star Game", "World Baseball Classic"] },
+  { label: "NCAA Baseball", titles: ["College World Series", "NCAA Baseball Super Regionals", "NCAA Baseball Regionals"] },
   { label: "NHL", titles: ["Stanley Cup", "Conference Finals", "NHL Playoffs"] },
-  { label: "PGA Tour", titles: ["The Masters", "US Open (Golf)", "PGA Championship", "The Open Championship", "Players Championship", "Ryder Cup", "FedEx Cup"] },
+  { label: "PGA Tour", titles: [
+    // Majors
+    "The Masters", "PGA Championship", "US Open (Golf)", "The Open Championship",
+    // Signature Events
+    "Players Championship", "Genesis Invitational", "Arnold Palmer Invitational",
+    "WM Phoenix Open", "AT&T Pebble Beach Pro-Am", "Memorial Tournament",
+    "RBC Heritage", "Wells Fargo Championship", "Travelers Championship",
+    // Playoff / Season Events
+    "FedEx St. Jude Championship", "BMW Championship", "Tour Championship", "FedEx Cup",
+    // Other Tour Events
+    "The Sentry", "Sony Open", "American Express", "Farmers Insurance Open",
+    "Mexico Open", "Cognizant Classic", "Honda Classic", "Puerto Rico Open",
+    "Valspar Championship", "Texas Children's Houston Open", "Valero Texas Open",
+    "Corales Puntacana Championship", "CJ Cup Byron Nelson", "Charles Schwab Challenge",
+    "RBC Canadian Open", "Rocket Mortgage Classic", "John Deere Classic",
+    "Genesis Scottish Open", "Barracuda Championship", "3M Open",
+    "Wyndham Championship", "Procore Championship", "Sanderson Farms Championship",
+    "Black Desert Championship", "Shriners Children's Open", "Zozo Championship",
+    "World Wide Technology Championship", "Butterfield Bermuda Championship",
+    "RSM Classic",
+    // Team Events
+    "Ryder Cup", "Presidents Cup",
+  ] },
   { label: "LPGA", titles: ["US Women's Open", "Women's PGA Championship", "Chevron Championship", "Women's Open"] },
   { label: "EPL", titles: ["EPL Title Race", "FA Cup", "League Cup", "Community Shield"] },
   { label: "Champions League", titles: ["UCL Final", "UCL Knockout Stage"] },
