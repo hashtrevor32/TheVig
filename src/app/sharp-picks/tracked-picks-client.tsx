@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Trophy,
   XCircle,
@@ -16,6 +16,8 @@ import {
   MapPin,
   Zap,
   PenLine,
+  Filter,
+  Tag,
 } from "lucide-react";
 
 type SerializedPick = {
@@ -42,6 +44,8 @@ type SerializedPick = {
   evPercent: number | null;
   stakeAmount: number | null;
   bookState: string | null;
+  league: string | null;
+  tag: string | null;
   status: string;
   result: string | null;
   settledAt: string | null;
@@ -81,6 +85,53 @@ const US_STATES = [
   "NY", "OH", "OR", "PA", "RI", "TN", "VA", "VT", "WA", "WV", "WY",
 ];
 
+// League/sport options with their major titles
+const LEAGUES: { label: string; titles: string[] }[] = [
+  { label: "NFL", titles: ["Super Bowl", "AFC Championship", "NFC Championship", "NFL Draft"] },
+  { label: "NBA", titles: ["NBA Finals", "NBA Playoffs", "NBA All-Star"] },
+  { label: "NCAAB", titles: ["March Madness", "NCAA Championship", "Final Four", "Elite Eight", "Sweet Sixteen"] },
+  { label: "NCAAF", titles: ["CFP National Championship", "CFP Playoff", "Rose Bowl", "Sugar Bowl", "Orange Bowl", "Cotton Bowl", "Fiesta Bowl", "Peach Bowl"] },
+  { label: "MLB", titles: ["World Series", "ALCS", "NLCS", "MLB Playoffs", "All-Star Game"] },
+  { label: "NHL", titles: ["Stanley Cup", "Conference Finals", "NHL Playoffs"] },
+  { label: "PGA Tour", titles: ["The Masters", "US Open (Golf)", "PGA Championship", "The Open Championship", "Players Championship", "Ryder Cup", "FedEx Cup"] },
+  { label: "LPGA", titles: ["US Women's Open", "Women's PGA Championship", "Chevron Championship", "Women's Open"] },
+  { label: "EPL", titles: ["EPL Title Race", "FA Cup", "League Cup", "Community Shield"] },
+  { label: "Champions League", titles: ["UCL Final", "UCL Knockout Stage"] },
+  { label: "MLS", titles: ["MLS Cup", "MLS Playoffs", "US Open Cup", "Leagues Cup"] },
+  { label: "La Liga", titles: ["La Liga Title Race", "Copa del Rey"] },
+  { label: "Serie A", titles: ["Serie A Title Race", "Coppa Italia"] },
+  { label: "Bundesliga", titles: ["Bundesliga Title Race", "DFB-Pokal"] },
+  { label: "Ligue 1", titles: ["Ligue 1 Title Race", "Coupe de France"] },
+  { label: "International Soccer", titles: ["World Cup", "Euros", "Copa America", "Nations League", "Gold Cup"] },
+  { label: "UFC / MMA", titles: ["UFC Title Fight", "UFC PPV", "UFC Fight Night"] },
+  { label: "Tennis", titles: ["Australian Open", "French Open", "Wimbledon", "US Open (Tennis)", "ATP Finals", "WTA Finals"] },
+  { label: "Boxing", titles: ["Title Fight", "PPV Main Event"] },
+  { label: "NASCAR", titles: ["Daytona 500", "NASCAR Cup Series", "NASCAR Playoffs"] },
+  { label: "F1", titles: ["World Championship", "Monaco GP", "US Grand Prix"] },
+  { label: "WNBA", titles: ["WNBA Finals", "WNBA Playoffs"] },
+  { label: "Other", titles: [] },
+];
+
+// Map smart pick sportDisplay to league label
+function smartPickLeague(sportDisplay: string | null): string | null {
+  if (!sportDisplay) return null;
+  const lower = sportDisplay.toLowerCase();
+  if (lower === "nba") return "NBA";
+  if (lower === "ncaab") return "NCAAB";
+  if (lower === "nfl") return "NFL";
+  if (lower === "ncaaf") return "NCAAF";
+  if (lower === "mlb") return "MLB";
+  if (lower === "nhl") return "NHL";
+  if (lower === "epl") return "EPL";
+  if (lower === "mls") return "MLS";
+  if (lower === "mma") return "UFC / MMA";
+  return sportDisplay;
+}
+
+function getPickLeague(pick: SerializedPick): string | null {
+  return pick.league || smartPickLeague(pick.sportDisplay);
+}
+
 function fmtOdds(odds: number): string {
   return odds > 0 ? `+${odds}` : `${odds}`;
 }
@@ -102,7 +153,6 @@ function fmtTime(iso: string): string {
   });
 }
 
-// Compute profit for a single pick
 function pickProfit(
   odds: number,
   result: string | null,
@@ -114,7 +164,7 @@ function pickProfit(
       : (stake * 100) / Math.abs(odds);
   }
   if (result === "LOSS") return -stake;
-  return 0; // PUSH or pending
+  return 0;
 }
 
 type SourceTab = "all" | "smart" | "manual";
@@ -129,9 +179,10 @@ export function TrackedPicksClient({
   const [picks, setPicks] = useState(initialPicks);
   const [stats, setStats] = useState(initialStats);
   const [sourceTab, setSourceTab] = useState<SourceTab>("all");
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "PENDING" | "SETTLED"
-  >("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "PENDING" | "SETTLED">("all");
+  const [filterLeague, setFilterLeague] = useState<string>("all");
+  const [filterTag, setFilterTag] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [autoSettling, setAutoSettling] = useState(false);
   const [autoSettleResult, setAutoSettleResult] = useState<string | null>(null);
@@ -139,7 +190,25 @@ export function TrackedPicksClient({
   const [showAddForm, setShowAddForm] = useState(false);
   const [addingBet, setAddingBet] = useState(false);
 
-  // Auto-settle on page load (only once) — smart picks only (they have commenceTime)
+  // Derive unique leagues and tags from picks for filter dropdowns
+  const { availableLeagues, availableTags } = useMemo(() => {
+    const leagues = new Set<string>();
+    const tags = new Set<string>();
+    for (const p of picks) {
+      if (p.status === "VOIDED") continue;
+      const league = getPickLeague(p);
+      if (league) leagues.add(league);
+      if (p.tag) tags.add(p.tag);
+    }
+    return {
+      availableLeagues: [...leagues].sort(),
+      availableTags: [...tags].sort(),
+    };
+  }, [picks]);
+
+  const hasActiveFilters = filterLeague !== "all" || filterTag !== "all";
+
+  // Auto-settle on page load (only once)
   useEffect(() => {
     if (autoSettleRan.current) return;
     const cutoff = Date.now() - 4 * 60 * 60 * 1000;
@@ -173,18 +242,25 @@ export function TrackedPicksClient({
       });
   }, [picks]);
 
-  // Filter picks by source tab then by status
-  const sourceFiltered = picks.filter((p) => {
-    if (p.status === "VOIDED") return false;
-    if (sourceTab === "smart") return (p.source || "smart") === "smart";
-    if (sourceTab === "manual") return p.source === "manual";
-    return true;
-  });
-
-  const filtered = sourceFiltered.filter((p) => {
-    if (filterStatus === "all") return true;
-    return p.status === filterStatus;
-  });
+  // Filter picks by source, status, league, tag
+  const filtered = useMemo(() => {
+    return picks.filter((p) => {
+      if (p.status === "VOIDED") return false;
+      // Source tab
+      if (sourceTab === "smart" && (p.source || "smart") !== "smart") return false;
+      if (sourceTab === "manual" && p.source !== "manual") return false;
+      // Status
+      if (filterStatus !== "all" && p.status !== filterStatus) return false;
+      // League
+      if (filterLeague !== "all") {
+        const league = getPickLeague(p);
+        if (league !== filterLeague) return false;
+      }
+      // Tag
+      if (filterTag !== "all" && p.tag !== filterTag) return false;
+      return true;
+    });
+  }, [picks, sourceTab, filterStatus, filterLeague, filterTag]);
 
   // Group by date
   const grouped = filtered.reduce<Record<string, SerializedPick[]>>(
@@ -197,7 +273,7 @@ export function TrackedPicksClient({
     {}
   );
 
-  // Recalculate stats from current picks + source filter
+  // Recalculate stats from filtered picks
   function recalcStats(updatedPicks: SerializedPick[], source?: SourceTab): Stats {
     const src = source ?? sourceTab;
     const active = updatedPicks.filter((p) => {
@@ -225,7 +301,6 @@ export function TrackedPicksClient({
     }
     const roi = totalRisked > 0 ? (totalProfit / totalRisked) * 100 : 0;
 
-    // Streak
     let streak = 0;
     let streakType: "W" | "L" | null = null;
     const byDate = [...settled].sort(
@@ -258,16 +333,12 @@ export function TrackedPicksClient({
     };
   }
 
-  // Recalc when source tab changes
   useEffect(() => {
     setStats(recalcStats(picks, sourceTab));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceTab]);
 
-  async function handleSettle(
-    pickId: string,
-    result: "WIN" | "LOSS" | "PUSH"
-  ) {
+  async function handleSettle(pickId: string, result: "WIN" | "LOSS" | "PUSH") {
     setSettlingId(pickId);
     try {
       const res = await fetch(`/api/tracked-picks/${pickId}`, {
@@ -278,12 +349,7 @@ export function TrackedPicksClient({
       if (res.ok) {
         const updated = picks.map((p) =>
           p.id === pickId
-            ? {
-                ...p,
-                status: "SETTLED",
-                result,
-                settledAt: new Date().toISOString(),
-              }
+            ? { ...p, status: "SETTLED", result, settledAt: new Date().toISOString() }
             : p
         );
         setPicks(updated);
@@ -336,6 +402,8 @@ export function TrackedPicksClient({
     stakeAmount?: number;
     bestBookName: string;
     bookState: string;
+    league: string;
+    tag?: string;
   }) {
     setAddingBet(true);
     try {
@@ -345,7 +413,6 @@ export function TrackedPicksClient({
         body: JSON.stringify(data),
       });
       if (res.ok) {
-        // Reload to get fresh data
         window.location.reload();
       }
     } catch {
@@ -384,7 +451,7 @@ export function TrackedPicksClient({
       </div>
 
       {/* Source tabs */}
-      <div className="flex items-center gap-1.5 mb-5">
+      <div className="flex items-center gap-1.5 mb-4">
         {(
           [
             { key: "all" as SourceTab, label: "All", count: smartCount + manualCount },
@@ -417,7 +484,6 @@ export function TrackedPicksClient({
           </button>
         ))}
 
-        {/* Add bet button */}
         {(sourceTab === "manual" || sourceTab === "all") && (
           <button
             onClick={() => setShowAddForm(true)}
@@ -440,93 +506,50 @@ export function TrackedPicksClient({
 
       {/* Stats bar */}
       {hasData && (
-        <div className="grid grid-cols-4 gap-2 mb-5">
+        <div className="grid grid-cols-4 gap-2 mb-4">
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">
-              Record
-            </p>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Record</p>
             <p className="text-sm font-bold text-slate-900">
-              {stats.wins}-{stats.losses}
-              {stats.pushes > 0 && `-${stats.pushes}`}
+              {stats.wins}-{stats.losses}{stats.pushes > 0 && `-${stats.pushes}`}
             </p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">
-              Win Rate
-            </p>
-            <p
-              className={`text-sm font-bold ${
-                stats.winRate >= 55
-                  ? "text-emerald-600"
-                  : stats.winRate >= 50
-                    ? "text-amber-600"
-                    : stats.wins + stats.losses > 0
-                      ? "text-red-600"
-                      : "text-slate-400"
-              }`}
-            >
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Win Rate</p>
+            <p className={`text-sm font-bold ${stats.winRate >= 55 ? "text-emerald-600" : stats.winRate >= 50 ? "text-amber-600" : stats.wins + stats.losses > 0 ? "text-red-600" : "text-slate-400"}`}>
               {stats.wins + stats.losses > 0 ? `${stats.winRate}%` : "--"}
             </p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">
-              P&L
-            </p>
-            <p
-              className={`text-sm font-bold ${
-                stats.totalProfit > 0
-                  ? "text-emerald-600"
-                  : stats.totalProfit < 0
-                    ? "text-red-600"
-                    : "text-slate-400"
-              }`}
-            >
-              {stats.wins + stats.losses > 0
-                ? `${stats.totalProfit > 0 ? "+" : ""}$${stats.totalProfit}`
-                : "--"}
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">P&L</p>
+            <p className={`text-sm font-bold ${stats.totalProfit > 0 ? "text-emerald-600" : stats.totalProfit < 0 ? "text-red-600" : "text-slate-400"}`}>
+              {stats.wins + stats.losses > 0 ? `${stats.totalProfit > 0 ? "+" : ""}$${stats.totalProfit}` : "--"}
             </p>
             {stats.wins + stats.losses > 0 && (
-              <p
-                className={`text-[10px] font-medium ${
-                  stats.roi > 0 ? "text-emerald-500" : "text-red-500"
-                }`}
-              >
-                {stats.roi > 0 ? "+" : ""}
-                {stats.roi}% ROI
+              <p className={`text-[10px] font-medium ${stats.roi > 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {stats.roi > 0 ? "+" : ""}{stats.roi}% ROI
               </p>
             )}
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">
-              Streak
-            </p>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Streak</p>
             <p className="text-sm font-bold text-slate-900 flex items-center justify-center gap-1">
               {stats.streak > 0 ? (
-                <>
-                  {stats.streak}
-                  {stats.streakType}
-                  {stats.streakType === "W" && stats.streak >= 3 && (
-                    <Flame size={14} className="text-orange-500" />
-                  )}
-                </>
-              ) : (
-                "--"
-              )}
+                <>{stats.streak}{stats.streakType}{stats.streakType === "W" && stats.streak >= 3 && <Flame size={14} className="text-orange-500" />}</>
+              ) : "--"}
             </p>
           </div>
         </div>
       )}
 
-      {/* Status filters */}
+      {/* Filters row */}
       {hasData && (
-        <div className="flex gap-1.5 mb-5">
-          {(
-            [
-              { key: "all", label: "All" },
-              { key: "PENDING", label: "Pending" },
-              { key: "SETTLED", label: "Settled" },
-            ] as const
-          ).map((f) => (
+        <div className="flex items-center gap-1.5 mb-5 flex-wrap">
+          {/* Status pills */}
+          {([
+            { key: "all", label: "All" },
+            { key: "PENDING", label: "Pending" },
+            { key: "SETTLED", label: "Settled" },
+          ] as const).map((f) => (
             <button
               key={f.key}
               onClick={() => setFilterStatus(f.key)}
@@ -539,26 +562,90 @@ export function TrackedPicksClient({
               {f.label}
             </button>
           ))}
+
+          <div className="w-px h-5 bg-slate-200 mx-1" />
+
+          {/* Filter toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              hasActiveFilters
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "bg-white text-slate-500 border border-slate-200 hover:text-slate-700"
+            }`}
+          >
+            <Filter size={12} />
+            {hasActiveFilters ? "Filtered" : "Filter"}
+          </button>
+
+          {/* Clear filters */}
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setFilterLeague("all");
+                setFilterTag("all");
+              }}
+              className="px-2 py-1.5 text-xs text-slate-400 hover:text-red-500"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Filter dropdowns */}
+      {showFilters && hasData && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5 flex gap-3">
+          <div className="flex-1">
+            <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">League</label>
+            <select
+              value={filterLeague}
+              onChange={(e) => setFilterLeague(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="all">All Leagues</option>
+              {availableLeagues.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </div>
+          {availableTags.length > 0 && (
+            <div className="flex-1">
+              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">Event</label>
+              <select
+                value={filterTag}
+                onChange={(e) => setFilterTag(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="all">All Events</option>
+                {availableTags.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
       {/* Empty state */}
-      {!hasData && !showAddForm && (
+      {filtered.length === 0 && !showAddForm && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-3">
             <Sparkles size={24} className="text-indigo-400" />
           </div>
           <p className="text-slate-500 text-sm font-medium">
-            No tracked picks yet
+            {hasActiveFilters ? "No picks match your filters" : "No tracked picks yet"}
           </p>
           <p className="text-slate-400 text-xs mt-1.5 max-w-xs mx-auto">
-            {sourceTab === "manual"
-              ? "Tap \"+ Add Bet\" to start tracking your own bets."
-              : sourceTab === "smart"
-                ? "Go to The Board, open a game's Sharp Picks, and tap the bookmark icon to start tracking AI recommendations."
-                : "Track Smart Picks from The Board or add your own bets manually."}
+            {hasActiveFilters
+              ? "Try adjusting or clearing your filters."
+              : sourceTab === "manual"
+                ? "Tap \"+ Add Bet\" to start tracking your own bets."
+                : sourceTab === "smart"
+                  ? "Go to The Board, open a game's Sharp Picks, and tap the bookmark icon to start tracking AI recommendations."
+                  : "Track Smart Picks from The Board or add your own bets manually."}
           </p>
-          {sourceTab !== "smart" && (
+          {!hasActiveFilters && sourceTab !== "smart" && (
             <button
               onClick={() => setShowAddForm(true)}
               className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm transition-colors"
@@ -607,6 +694,8 @@ function AddBetForm({
     stakeAmount?: number;
     bestBookName: string;
     bookState: string;
+    league: string;
+    tag?: string;
   }) => void;
   onCancel: () => void;
   submitting: boolean;
@@ -617,7 +706,12 @@ function AddBetForm({
   const [book, setBook] = useState("");
   const [customBook, setCustomBook] = useState("");
   const [state, setState] = useState("");
+  const [league, setLeague] = useState("");
+  const [tag, setTag] = useState("");
   const [error, setError] = useState("");
+
+  const selectedLeagueData = LEAGUES.find((l) => l.label === league);
+  const titles = selectedLeagueData?.titles || [];
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -645,6 +739,11 @@ function AddBetForm({
       return;
     }
 
+    if (!league) {
+      setError("Select a league");
+      return;
+    }
+
     const stake = stakeStr ? parseInt(stakeStr) : undefined;
 
     onSubmit({
@@ -653,6 +752,8 @@ function AddBetForm({
       stakeAmount: stake && stake > 0 ? stake : undefined,
       bestBookName: selectedBook.trim(),
       bookState: state,
+      league,
+      tag: tag || undefined,
     });
   }
 
@@ -663,20 +764,46 @@ function AddBetForm({
           <PenLine size={14} className="text-emerald-500" />
           Add a Bet
         </h3>
-        <button
-          onClick={onCancel}
-          className="p-1 text-slate-400 hover:text-slate-600"
-        >
+        <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600">
           <X size={16} />
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
+        {/* League + Event/Title row */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">League / Sport</label>
+            <select
+              value={league}
+              onChange={(e) => { setLeague(e.target.value); setTag(""); }}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent bg-white"
+            >
+              <option value="">Select...</option>
+              {LEAGUES.map((l) => (
+                <option key={l.label} value={l.label}>{l.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Event (optional)</label>
+            <select
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              disabled={!league || titles.length === 0}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent bg-white disabled:opacity-50"
+            >
+              <option value="">None</option>
+              {titles.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Bet description */}
         <div>
-          <label className="text-[11px] font-medium text-slate-500 mb-1 block">
-            What&apos;s the bet?
-          </label>
+          <label className="text-[11px] font-medium text-slate-500 mb-1 block">What&apos;s the bet?</label>
           <input
             type="text"
             value={pick}
@@ -690,9 +817,7 @@ function AddBetForm({
         {/* Odds + Stake row */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">
-              Odds
-            </label>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Odds</label>
             <input
               type="text"
               inputMode="text"
@@ -703,14 +828,9 @@ function AddBetForm({
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">
-              Stake (optional)
-            </label>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Stake (optional)</label>
             <div className="relative">
-              <DollarSign
-                size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <DollarSign size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="number"
                 value={stakeStr}
@@ -725,9 +845,7 @@ function AddBetForm({
         {/* Sportsbook + State row */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">
-              Sportsbook
-            </label>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">Sportsbook</label>
             <select
               value={book}
               onChange={(e) => setBook(e.target.value)}
@@ -735,9 +853,7 @@ function AddBetForm({
             >
               <option value="">Select...</option>
               {SPORTSBOOKS.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
+                <option key={b} value={b}>{b}</option>
               ))}
               <option value="other">Other</option>
             </select>
@@ -752,9 +868,7 @@ function AddBetForm({
             )}
           </div>
           <div>
-            <label className="text-[11px] font-medium text-slate-500 mb-1 block">
-              State
-            </label>
+            <label className="text-[11px] font-medium text-slate-500 mb-1 block">State</label>
             <select
               value={state}
               onChange={(e) => setState(e.target.value)}
@@ -762,17 +876,13 @@ function AddBetForm({
             >
               <option value="">Select...</option>
               {US_STATES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
         </div>
 
-        {error && (
-          <p className="text-red-500 text-xs font-medium">{error}</p>
-        )}
+        {error && <p className="text-red-500 text-xs font-medium">{error}</p>}
 
         <div className="flex items-center gap-2 pt-1">
           <button
@@ -780,18 +890,10 @@ function AddBetForm({
             disabled={submitting}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-emerald-500/20 transition-colors disabled:opacity-50"
           >
-            {submitting ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Plus size={14} />
-            )}
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             Add Bet
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
-          >
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
             Cancel
           </button>
         </div>
@@ -817,9 +919,7 @@ function PickCard({
   showSourceBadge?: boolean;
 }) {
   const [editingStake, setEditingStake] = useState(false);
-  const [stakeValue, setStakeValue] = useState(
-    pick.stakeAmount?.toString() || ""
-  );
+  const [stakeValue, setStakeValue] = useState(pick.stakeAmount?.toString() || "");
 
   const isManual = pick.source === "manual";
   const stake = pick.stakeAmount || 100;
@@ -833,6 +933,8 @@ function PickCard({
       ? (stake * pick.bestOdds) / 100
       : (stake * 100) / Math.abs(pick.bestOdds);
 
+  const pickLeague = getPickLeague(pick);
+
   function handleStakeSubmit() {
     const amt = parseInt(stakeValue);
     if (amt > 0) {
@@ -843,57 +945,59 @@ function PickCard({
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-      {/* Event info — different for smart vs manual */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Top meta row */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         {showSourceBadge && (
           <span
             className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md ${
-              isManual
-                ? "bg-violet-100 text-violet-600"
-                : "bg-indigo-100 text-indigo-600"
+              isManual ? "bg-violet-100 text-violet-600" : "bg-indigo-100 text-indigo-600"
             }`}
           >
             {isManual ? "My Bet" : "Smart"}
           </span>
         )}
+        {/* League badge */}
+        {pickLeague && (
+          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-slate-100 text-slate-600">
+            {pickLeague}
+          </span>
+        )}
+        {/* Tag badge */}
+        {pick.tag && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-amber-50 text-amber-700">
+            <Tag size={8} />
+            {pick.tag}
+          </span>
+        )}
         {isManual ? (
           <>
             {pick.bestBookName && (
-              <span className="text-slate-400 text-[10px] font-medium">
-                {pick.bestBookName}
-              </span>
+              <>
+                <span className="text-slate-300 text-[10px]">&middot;</span>
+                <span className="text-slate-400 text-[10px] font-medium">{pick.bestBookName}</span>
+              </>
             )}
             {pick.bookState && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
                 <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
-                  <MapPin size={8} />
-                  {pick.bookState}
+                  <MapPin size={8} />{pick.bookState}
                 </span>
               </>
             )}
           </>
         ) : (
           <>
-            {pick.sportDisplay && (
-              <span className="text-slate-400 text-[10px] font-medium">
-                {pick.sportDisplay}
-              </span>
-            )}
             {pick.awayTeam && pick.homeTeam && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
-                <span className="text-slate-400 text-[10px]">
-                  {pick.awayTeam} @ {pick.homeTeam}
-                </span>
+                <span className="text-slate-400 text-[10px]">{pick.awayTeam} @ {pick.homeTeam}</span>
               </>
             )}
             {pick.commenceTime && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
-                <span className="text-slate-400 text-[10px]">
-                  {fmtTime(pick.commenceTime)}
-                </span>
+                <span className="text-slate-400 text-[10px]">{fmtTime(pick.commenceTime)}</span>
               </>
             )}
           </>
@@ -905,94 +1009,59 @@ function PickCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             {!isManual && pick.confidence && (
-              <span
-                className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${confidenceStyles[pick.confidence] || ""}`}
-              >
+              <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${confidenceStyles[pick.confidence] || ""}`}>
                 {pick.confidence}
               </span>
             )}
             {!isManual && pick.marketLabel && (
-              <span className="text-slate-400 text-[10px] font-medium">
-                {pick.marketLabel}
-              </span>
+              <span className="text-slate-400 text-[10px] font-medium">{pick.marketLabel}</span>
             )}
-            {/* Result badge */}
             {pick.status === "SETTLED" && pick.result && (
-              <span
-                className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${resultStyles[pick.result] || ""}`}
-              >
+              <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full ${resultStyles[pick.result] || ""}`}>
                 {pick.result}
               </span>
             )}
             {pick.status === "PENDING" && (
-              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-amber-50 text-amber-600">
-                PENDING
-              </span>
+              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-amber-50 text-amber-600">PENDING</span>
             )}
           </div>
-          <p className="text-slate-900 text-sm font-bold leading-snug">
-            {pick.pick}
-          </p>
+          <p className="text-slate-900 text-sm font-bold leading-snug">{pick.pick}</p>
         </div>
 
-        {/* Odds + payout */}
         <div className="shrink-0 text-right">
           {!isManual && pick.bestBookName && (
-            <span className="text-[9px] text-slate-400 block mb-0.5">
-              {pick.bestBookName}
-            </span>
+            <span className="text-[9px] text-slate-400 block mb-0.5">{pick.bestBookName}</span>
           )}
           <span
             className={`font-mono text-xs font-bold ${
               pick.status === "SETTLED"
-                ? pick.result === "WIN"
-                  ? "text-emerald-600"
-                  : pick.result === "LOSS"
-                    ? "text-red-600"
-                    : "text-slate-500"
+                ? pick.result === "WIN" ? "text-emerald-600" : pick.result === "LOSS" ? "text-red-600" : "text-slate-500"
                 : "text-slate-700"
             }`}
           >
             {fmtOdds(pick.bestOdds)}
           </span>
           {pick.status === "SETTLED" && profit !== null && profit !== 0 && (
-            <p
-              className={`text-[10px] font-bold ${
-                profit > 0 ? "text-emerald-600" : "text-red-600"
-              }`}
-            >
+            <p className={`text-[10px] font-bold ${profit > 0 ? "text-emerald-600" : "text-red-600"}`}>
               {profit > 0 ? "+" : ""}${Math.round(profit)}
             </p>
           )}
           {pick.status === "PENDING" && (
-            <p className="text-[10px] text-slate-400">
-              win +${Math.round(potentialWin)}
-            </p>
+            <p className="text-[10px] text-slate-400">win +${Math.round(potentialWin)}</p>
           )}
         </div>
       </div>
 
-      {/* Reasoning — smart picks only */}
       {!isManual && pick.reasoning && (
-        <p className="text-slate-500 text-xs leading-relaxed mb-3">
-          {pick.reasoning}
-        </p>
+        <p className="text-slate-500 text-xs leading-relaxed mb-3">{pick.reasoning}</p>
       )}
 
-      {/* Stake + Actions */}
       {pick.status === "PENDING" && (
         <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-          {/* Stake input */}
           <div className="flex items-center gap-1 mr-1">
             <DollarSign size={11} className="text-slate-400" />
             {editingStake ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleStakeSubmit();
-                }}
-                className="flex items-center gap-1"
-              >
+              <form onSubmit={(e) => { e.preventDefault(); handleStakeSubmit(); }} className="flex items-center gap-1">
                 <input
                   type="number"
                   value={stakeValue}
@@ -1000,79 +1069,43 @@ function PickCard({
                   autoFocus
                   className="w-16 px-1.5 py-0.5 text-[11px] border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400 text-right"
                   onBlur={handleStakeSubmit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") setEditingStake(false);
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Escape") setEditingStake(false); }}
                 />
               </form>
             ) : (
               <button
-                onClick={() => {
-                  setEditingStake(true);
-                  setStakeValue(pick.stakeAmount?.toString() || "");
-                }}
+                onClick={() => { setEditingStake(true); setStakeValue(pick.stakeAmount?.toString() || ""); }}
                 className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium border-b border-dashed border-slate-300"
               >
                 {pick.stakeAmount ? `$${pick.stakeAmount}` : "Set stake"}
               </button>
             )}
           </div>
-
           <div className="w-px h-4 bg-slate-200" />
-
-          {/* Settle buttons */}
-          <span className="text-[10px] text-slate-400 font-medium">
-            Settle:
-          </span>
-          <button
-            onClick={() => onSettle(pick.id, "WIN")}
-            disabled={settlingId === pick.id}
-            className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-200 transition-colors"
-          >
-            <Trophy size={11} />
-            Win
+          <span className="text-[10px] text-slate-400 font-medium">Settle:</span>
+          <button onClick={() => onSettle(pick.id, "WIN")} disabled={settlingId === pick.id} className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold rounded-lg border border-emerald-200 transition-colors">
+            <Trophy size={11} />Win
           </button>
-          <button
-            onClick={() => onSettle(pick.id, "LOSS")}
-            disabled={settlingId === pick.id}
-            className="flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-lg border border-red-200 transition-colors"
-          >
-            <XCircle size={11} />
-            Loss
+          <button onClick={() => onSettle(pick.id, "LOSS")} disabled={settlingId === pick.id} className="flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-lg border border-red-200 transition-colors">
+            <XCircle size={11} />Loss
           </button>
-          <button
-            onClick={() => onSettle(pick.id, "PUSH")}
-            disabled={settlingId === pick.id}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] font-bold rounded-lg border border-slate-200 transition-colors"
-          >
-            <Minus size={11} />
-            Push
+          <button onClick={() => onSettle(pick.id, "PUSH")} disabled={settlingId === pick.id} className="flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] font-bold rounded-lg border border-slate-200 transition-colors">
+            <Minus size={11} />Push
           </button>
           <div className="flex-1" />
-          <button
-            onClick={() => onDelete(pick.id)}
-            className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
-            title="Delete pick"
-          >
+          <button onClick={() => onDelete(pick.id)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors" title="Delete pick">
             <Trash2 size={13} />
           </button>
         </div>
       )}
 
-      {/* Settled info */}
       {pick.status === "SETTLED" && (
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 size={11} className="text-slate-300" />
-            <span className="text-[10px] text-slate-400">
-              Settled {pick.settledAt ? fmtDate(pick.settledAt) : ""}
-            </span>
+            <span className="text-[10px] text-slate-400">Settled {pick.settledAt ? fmtDate(pick.settledAt) : ""}</span>
           </div>
-          {pick.stakeAmount && (
-            <span className="text-[10px] text-slate-400">
-              ${pick.stakeAmount} risked
-            </span>
-          )}
+          {pick.stakeAmount && <span className="text-[10px] text-slate-400">${pick.stakeAmount} risked</span>}
         </div>
       )}
     </div>

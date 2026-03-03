@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
 
   const data = await req.json();
 
-  const { pick, bestOdds, stakeAmount, bestBookName, bookState } = data;
+  const { pick, bestOdds, stakeAmount, bestBookName, bookState, league, tag } = data;
 
   if (!pick || typeof pick !== "string" || !pick.trim()) {
     return NextResponse.json(
@@ -40,6 +40,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!league || typeof league !== "string" || !league.trim()) {
+    return NextResponse.json(
+      { error: "League is required" },
+      { status: 400 }
+    );
+  }
+
   const created = await prisma.trackedPick.create({
     data: {
       operatorId: session.operatorId,
@@ -50,6 +57,9 @@ export async function POST(req: NextRequest) {
       bestBookName: bestBookName.trim(),
       bestBook: bestBookName.trim().toLowerCase().replace(/\s+/g, ""),
       bookState: bookState.trim().toUpperCase(),
+      league: league.trim(),
+      tag: tag && typeof tag === "string" && tag.trim() ? tag.trim() : null,
+      sportDisplay: league.trim(), // Also set sportDisplay for cross-compatibility
       stakeAmount: stakeAmount && stakeAmount > 0 ? Math.round(stakeAmount) : null,
       status: "PENDING",
     },

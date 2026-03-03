@@ -8,6 +8,7 @@ import {
   Sparkles,
   CheckCircle2,
   MapPin,
+  Tag,
 } from "lucide-react";
 import { computeProfit, type PickStats } from "@/lib/pick-stats";
 
@@ -35,6 +36,8 @@ type SerializedPick = {
   evPercent: number | null;
   stakeAmount: number | null;
   bookState: string | null;
+  league: string | null;
+  tag: string | null;
   status: string;
   result: string | null;
   settledAt: string | null;
@@ -53,6 +56,22 @@ const resultStyles: Record<string, string> = {
   LOSS: "bg-red-100 text-red-700",
   PUSH: "bg-slate-100 text-slate-500",
 };
+
+function getPickLeague(pick: SerializedPick): string | null {
+  if (pick.league) return pick.league;
+  if (!pick.sportDisplay) return null;
+  const lower = pick.sportDisplay.toLowerCase();
+  if (lower === "nba") return "NBA";
+  if (lower === "ncaab") return "NCAAB";
+  if (lower === "nfl") return "NFL";
+  if (lower === "ncaaf") return "NCAAF";
+  if (lower === "mlb") return "MLB";
+  if (lower === "nhl") return "NHL";
+  if (lower === "epl") return "EPL";
+  if (lower === "mls") return "MLS";
+  if (lower === "mma") return "UFC / MMA";
+  return pick.sportDisplay;
+}
 
 function fmtOdds(odds: number): string {
   return odds > 0 ? `+${odds}` : `${odds}`;
@@ -276,10 +295,12 @@ function ReadOnlyPickCard({ pick }: { pick: SerializedPick }) {
       ? (stake * pick.bestOdds) / 100
       : (stake * 100) / Math.abs(pick.bestOdds);
 
+  const pickLeague = getPickLeague(pick);
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-      {/* Event info — different for smart vs manual */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Top meta row */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span
           className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md ${
             isManual
@@ -289,44 +310,46 @@ function ReadOnlyPickCard({ pick }: { pick: SerializedPick }) {
         >
           {isManual ? "My Bet" : "Smart"}
         </span>
+        {pickLeague && (
+          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-slate-100 text-slate-600">
+            {pickLeague}
+          </span>
+        )}
+        {pick.tag && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-amber-50 text-amber-700">
+            <Tag size={8} />
+            {pick.tag}
+          </span>
+        )}
         {isManual ? (
           <>
             {pick.bestBookName && (
-              <span className="text-slate-400 text-[10px] font-medium">
-                {pick.bestBookName}
-              </span>
+              <>
+                <span className="text-slate-300 text-[10px]">&middot;</span>
+                <span className="text-slate-400 text-[10px] font-medium">{pick.bestBookName}</span>
+              </>
             )}
             {pick.bookState && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
                 <span className="text-slate-400 text-[10px] flex items-center gap-0.5">
-                  <MapPin size={8} />
-                  {pick.bookState}
+                  <MapPin size={8} />{pick.bookState}
                 </span>
               </>
             )}
           </>
         ) : (
           <>
-            {pick.sportDisplay && (
-              <span className="text-slate-400 text-[10px] font-medium">
-                {pick.sportDisplay}
-              </span>
-            )}
             {pick.awayTeam && pick.homeTeam && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
-                <span className="text-slate-400 text-[10px]">
-                  {pick.awayTeam} @ {pick.homeTeam}
-                </span>
+                <span className="text-slate-400 text-[10px]">{pick.awayTeam} @ {pick.homeTeam}</span>
               </>
             )}
             {pick.commenceTime && (
               <>
                 <span className="text-slate-300 text-[10px]">&middot;</span>
-                <span className="text-slate-400 text-[10px]">
-                  {fmtTime(pick.commenceTime)}
-                </span>
+                <span className="text-slate-400 text-[10px]">{fmtTime(pick.commenceTime)}</span>
               </>
             )}
           </>

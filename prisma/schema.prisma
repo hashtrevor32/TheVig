@@ -211,6 +211,8 @@ model TrackedPick {
 
   // Manual bet extras
   bookState      String?            // US state where bet was placed (e.g. "NJ", "PA")
+  league         String?            // League/sport label (e.g. "NFL", "PGA Tour", "NBA")
+  tag            String?            // Tournament/title tag (e.g. "Masters", "Super Bowl", "March Madness")
 
   // Stake (user-entered, in dollars)
   stakeAmount    Int?
