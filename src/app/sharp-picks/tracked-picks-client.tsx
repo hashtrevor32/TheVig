@@ -182,7 +182,7 @@ export function TrackedPicksClient({
   const [filterStatus, setFilterStatus] = useState<"all" | "PENDING" | "SETTLED">("all");
   const [filterLeague, setFilterLeague] = useState<string>("all");
   const [filterTag, setFilterTag] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
+  // showFilters removed — league/event dropdowns are always visible
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [autoSettling, setAutoSettling] = useState(false);
   const [autoSettleResult, setAutoSettleResult] = useState<string | null>(null);
@@ -568,7 +568,7 @@ export function TrackedPicksClient({
 
       {/* Filters row */}
       {hasData && (
-        <div className="flex items-center gap-1.5 mb-5 flex-wrap">
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
           {/* Status pills */}
           {([
             { key: "all", label: "All" },
@@ -588,41 +588,31 @@ export function TrackedPicksClient({
             </button>
           ))}
 
-          <div className="w-px h-5 bg-slate-200 mx-1" />
-
-          {/* Filter toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-              hasActiveFilters
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "bg-white text-slate-500 border border-slate-200 hover:text-slate-700"
-            }`}
-          >
-            <Filter size={12} />
-            {hasActiveFilters ? "Filtered" : "Filter"}
-          </button>
-
-          {/* Clear filters */}
           {hasActiveFilters && (
-            <button
-              onClick={() => {
-                setFilterLeague("all");
-                setFilterTag("all");
-              }}
-              className="px-2 py-1.5 text-xs text-slate-400 hover:text-red-500"
-            >
-              Clear
-            </button>
+            <>
+              <div className="w-px h-5 bg-slate-200 mx-1" />
+              <button
+                onClick={() => {
+                  setFilterLeague("all");
+                  setFilterTag("all");
+                }}
+                className="px-2 py-1.5 text-xs font-medium text-red-500 hover:text-red-700"
+              >
+                Clear Filters
+              </button>
+            </>
           )}
         </div>
       )}
 
-      {/* Filter dropdowns */}
-      {showFilters && hasData && (
+      {/* League / Event filter dropdowns — always visible */}
+      {hasData && (availableLeagues.length > 0 || availableTags.length > 0) && (
         <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5 flex gap-3">
           <div className="flex-1">
-            <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">League</label>
+            <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block flex items-center gap-1">
+              <Filter size={9} />
+              League
+            </label>
             <select
               value={filterLeague}
               onChange={(e) => setFilterLeague(e.target.value)}
@@ -636,7 +626,10 @@ export function TrackedPicksClient({
           </div>
           {availableTags.length > 0 && (
             <div className="flex-1">
-              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">Event</label>
+              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block flex items-center gap-1">
+                <Tag size={9} />
+                Event
+              </label>
               <select
                 value={filterTag}
                 onChange={(e) => setFilterTag(e.target.value)}
@@ -1075,10 +1068,10 @@ function PickCard({
               setEditTag(pick.tag || "");
               setEditingTags(true);
             }}
-            className="p-0.5 text-slate-300 hover:text-indigo-500 transition-colors"
-            title="Edit league & event tag"
+            className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-md bg-indigo-50 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-700 border border-indigo-100 transition-colors"
           >
-            <PenLine size={10} />
+            <PenLine size={9} />
+            Tag
           </button>
         )}
         {isManual ? (
