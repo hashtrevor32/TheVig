@@ -396,6 +396,31 @@ export function TrackedPicksClient({
     }
   }
 
+  async function handleUpdateLeagueTag(pickId: string, league: string | null, tag: string | null) {
+    try {
+      const res = await fetch(`/api/tracked-picks/${pickId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league: league || "", tag: tag || "" }),
+      });
+      if (res.ok) {
+        const updated = picks.map((p) =>
+          p.id === pickId
+            ? {
+                ...p,
+                league: league || null,
+                tag: tag || null,
+                sportDisplay: league || p.sportDisplay,
+              }
+            : p
+        );
+        setPicks(updated);
+      }
+    } catch {
+      // Handle error silently
+    }
+  }
+
   async function handleAddManualBet(data: {
     pick: string;
     bestOdds: number;
@@ -671,6 +696,7 @@ export function TrackedPicksClient({
                 settlingId={settlingId}
                 onSettle={handleSettle}
                 onUpdateStake={handleUpdateStake}
+                onUpdateLeagueTag={handleUpdateLeagueTag}
                 onDelete={handleDelete}
                 showSourceBadge={sourceTab === "all"}
               />
@@ -908,6 +934,7 @@ function PickCard({
   settlingId,
   onSettle,
   onUpdateStake,
+  onUpdateLeagueTag,
   onDelete,
   showSourceBadge,
 }: {
@@ -915,11 +942,15 @@ function PickCard({
   settlingId: string | null;
   onSettle: (id: string, result: "WIN" | "LOSS" | "PUSH") => void;
   onUpdateStake: (id: string, stake: number) => void;
+  onUpdateLeagueTag: (id: string, league: string | null, tag: string | null) => void;
   onDelete: (id: string) => void;
   showSourceBadge?: boolean;
 }) {
   const [editingStake, setEditingStake] = useState(false);
   const [stakeValue, setStakeValue] = useState(pick.stakeAmount?.toString() || "");
+  const [editingTags, setEditingTags] = useState(false);
+  const [editLeague, setEditLeague] = useState(pick.league || "");
+  const [editTag, setEditTag] = useState(pick.tag || "");
 
   const isManual = pick.source === "manual";
   const stake = pick.stakeAmount || 100;
@@ -935,6 +966,9 @@ function PickCard({
 
   const pickLeague = getPickLeague(pick);
 
+  const editLeagueData = LEAGUES.find((l) => l.label === editLeague);
+  const editTitles = editLeagueData?.titles || [];
+
   function handleStakeSubmit() {
     const amt = parseInt(stakeValue);
     if (amt > 0) {
@@ -943,8 +977,72 @@ function PickCard({
     setEditingStake(false);
   }
 
+  function handleTagSave() {
+    onUpdateLeagueTag(
+      pick.id,
+      editLeague || null,
+      editTag || null
+    );
+    setEditingTags(false);
+  }
+
+  function handleTagCancel() {
+    setEditLeague(pick.league || "");
+    setEditTag(pick.tag || "");
+    setEditingTags(false);
+  }
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+      {/* Inline league/tag editor */}
+      {editingTags && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3">
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">League</label>
+              <select
+                value={editLeague}
+                onChange={(e) => { setEditLeague(e.target.value); setEditTag(""); }}
+                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">None</option>
+                {LEAGUES.map((l) => (
+                  <option key={l.label} value={l.label}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1 block">Event</label>
+              <select
+                value={editTag}
+                onChange={(e) => setEditTag(e.target.value)}
+                disabled={!editLeague || editTitles.length === 0}
+                className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-50"
+              >
+                <option value="">None</option>
+                {editTitles.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTagSave}
+              className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold rounded-lg transition-colors"
+            >
+              Save
+            </button>
+            <button
+              onClick={handleTagCancel}
+              className="px-3 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top meta row */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         {showSourceBadge && (
@@ -968,6 +1066,20 @@ function PickCard({
             <Tag size={8} />
             {pick.tag}
           </span>
+        )}
+        {/* Edit league/tag button */}
+        {!editingTags && (
+          <button
+            onClick={() => {
+              setEditLeague(pick.league || smartPickLeague(pick.sportDisplay) || "");
+              setEditTag(pick.tag || "");
+              setEditingTags(true);
+            }}
+            className="p-0.5 text-slate-300 hover:text-indigo-500 transition-colors"
+            title="Edit league & event tag"
+          >
+            <PenLine size={10} />
+          </button>
         )}
         {isManual ? (
           <>

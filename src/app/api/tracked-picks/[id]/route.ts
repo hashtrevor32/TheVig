@@ -51,13 +51,28 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   }
 
-  // If just updating stake amount (no result)
+  // Build update object for non-settle fields
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: any = {};
+
   if (body.stakeAmount !== undefined) {
+    updateData.stakeAmount = body.stakeAmount;
+  }
+
+  if (body.league !== undefined) {
+    updateData.league = body.league || null;
+    // Also set sportDisplay for cross-compat
+    if (body.league) updateData.sportDisplay = body.league;
+  }
+
+  if (body.tag !== undefined) {
+    updateData.tag = body.tag || null;
+  }
+
+  if (Object.keys(updateData).length > 0) {
     await prisma.trackedPick.update({
       where: { id },
-      data: {
-        stakeAmount: body.stakeAmount,
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ success: true });
